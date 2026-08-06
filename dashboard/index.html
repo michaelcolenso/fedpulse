@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FedPulse — Regulatory Intelligence</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="logo">FP</span>
+    <div>
+      <h1>FedPulse</h1>
+      <p class="tagline">Regulatory signal from federal metadata · no NLP · public-domain feeds</p>
+    </div>
+  </div>
+  <div class="asof" id="asof">as of —</div>
+</header>
+
+<main>
+  <section class="panel" id="panel-api">
+    <div class="panel-head">
+      <h2>① Agency Pulse Index</h2>
+      <span class="sub">4-wk volume z-score · flag ≥ 2.5σ</span>
+      <span class="count" id="api-count">0</span>
+    </div>
+    <div class="filters">
+      <input id="api-filter" type="search" placeholder="filter agency…" autocomplete="off">
+    </div>
+    <div class="list" id="api-list"><div class="empty">No data yet — awaiting first ingest.</div></div>
+  </section>
+
+  <section class="panel" id="panel-rcr">
+    <div class="panel-head">
+      <h2>② Regulatory Churn Ratio</h2>
+      <span class="sub">(Proposed + Notices) / Final · 12-mo · flag ≥ 5:1</span>
+      <span class="count" id="rcr-count">0</span>
+    </div>
+    <div class="filters">
+      <input id="rcr-filter" type="search" placeholder="filter agency…" autocomplete="off">
+    </div>
+    <div class="list" id="rcr-list"><div class="empty">No data yet — awaiting first ingest.</div></div>
+  </section>
+
+  <section class="panel" id="panel-ter">
+    <div class="panel-head">
+      <h2>③ Topic Emergence Radar</h2>
+      <span class="sub">new / accelerating LC subject headings</span>
+      <span class="count" id="ter-count">0</span>
+    </div>
+    <div class="filters">
+      <input id="ter-filter" type="search" placeholder="filter subject…" autocomplete="off">
+      <div class="seg" id="ter-seg">
+        <button data-mode="new" class="active">New</button>
+        <button data-mode="accel">Accelerating</button>
+      </div>
+    </div>
+    <div class="list" id="ter-list"><div class="empty">No data yet — awaiting first ingest.</div></div>
+  </section>
+</main>
+
+<footer>
+  <span id="status">loading…</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
