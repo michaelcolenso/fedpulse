@@ -113,9 +113,11 @@ def compute_rcr(conn, as_of: str | None = None) -> dict:
     ).fetchall()
     agg: dict[str, dict[str, int]] = defaultdict(lambda: {"rule": 0, "proposed_rule": 0, "notice": 0, "other": 0})
     for r in rows:
-        t = r["doc_type"].lower()
-        key = "rule" if t == "rule" else "proposed_rule" if t == "proposed rule" else "notice" if t == "notice" else "other"
-        agg[r["agency"]][key] += 1
+        t = r["doc_type"].lower().replace("-", "_").replace(" ", "_")
+        if t in ("rule", "proposed_rule", "notice"):
+            agg[r["agency"]][t] += 1
+        else:
+            agg[r["agency"]]["other"] += 1
 
     out = []
     for agency, c in agg.items():

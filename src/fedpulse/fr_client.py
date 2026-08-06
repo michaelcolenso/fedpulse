@@ -106,8 +106,11 @@ def backfill(start: str, end: str | None = None) -> Iterator[list[dict]]:
 def to_record(doc: dict) -> dict:
     """Map an FR API document to FedPulse's records-table dict."""
     agencies = doc.get("agencies") or []
-    agency = agencies[0].get("name") if agencies else None
-    slug = agencies[0].get("slug") if agencies else None
+    # FR lists parent agencies first; prefer the most specific child (has a parent_id)
+    children = [a for a in agencies if a.get("parent_id")]
+    chosen = children[0] if children else (agencies[0] if agencies else None)
+    agency = chosen.get("name") if chosen else None
+    slug = chosen.get("slug") if chosen else None
     doc_type = doc.get("type")
     # normalize type to snake-case tokens used by RCR
     if doc_type:

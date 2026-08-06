@@ -1,9 +1,12 @@
 """One-off data migration: recompute cataloged_dates with the fixed 2-digit-year
-window, then rebuild subject_first_seen from the true MIN(cataloged_date) per
-subject. Run once after the date-parser fix; safe to re-run.
+window, rebuild subject_first_seen from the true MIN(cataloged_date) per subject,
+and re-attribute FR records to the most specific agency (child, not parent).
+
+Run once after the date-parser fix; safe to re-run.
 
 Why: the naive 'YY>=90 → 19xx' rule misdated ~294k records cataloged 1965-1989
-as 2065-2089, which poisoned TER emergence (everything looked 'new').
+as 2065-2089, which poisoned TER emergence (everything looked 'new'). Also, FR
+lists parent agencies first, so FDA docs were attributed to HHS.
 """
 from __future__ import annotations
 
@@ -38,6 +41,27 @@ def fix_dates(conn: sqlite3.Connection) -> int:
     return len(updates)
 
 
+def fix_fr_agencies(conn: sqlite3.Connection) -> int:
+    rows = conn.execute("SELECT id, raw_json FROM records WHERE source='fr'").fetchall()
+    print(f"re-attributing {len(rows)} fr records to specific agencies ...", flush=True)
+    updates = []
+    for rid, raw in rows:
+        try:
+            doc = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        agencies = doc.get("agencies") or []
+        children = [a for a in agencies if a.get("parent_id")]
+        chosen = children[0] if children else (agencies[0] if agencies else None)
+        if not chosen:
+            continue
+        updates.append((chosen.get("name"), chosen.get("slug"), rid))
+    conn.executemany("UPDATE records SET agency=?, agency_slug=? WHERE id=?", updates)
+    conn.commit()
+    print(f"re-attributed {len(updates)} fr records")
+    return len(updates)
+
+
 def rebuild_first_seen(conn: sqlite3.Connection) -> int:
     conn.execute("DELETE FROM subject_first_seen")
     conn.execute(
@@ -65,6 +89,7 @@ def main() -> int:
     conn.execute("PRAGMA busy_timeout = 60000")
     try:
         fix_dates(conn)
+        fix_fr_agencies(conn)
         rebuild_first_seen(conn)
     finally:
         conn.close()
