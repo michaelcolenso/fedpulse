@@ -13,6 +13,7 @@ Extracts only the high-signal fields FedPulse needs:
 """
 from __future__ import annotations
 
+import datetime as dt
 import re
 from xml.etree import ElementTree as ET
 
@@ -20,6 +21,16 @@ MARC_NS = "http://www.loc.gov/MARC21/slim"
 _YEAR_RE = re.compile(r"\b(1[89]\d{2}|20\d{2})\b")
 _SUDOC_RE = re.compile(r"^([A-Z]{1,5}\d{0,2})")
 _TRAIL_PUNCT = re.compile(r"[,\s;:/]+$")
+
+
+def _marc_two_digit_year(yy: int) -> int:
+    """MARC 008 2-digit year → sliding 100-year window (current century aware).
+
+    yy <= current_yy → 20yy; else 19yy. Fixes 1980-89 records that a naive
+    '>=90 → 19xx' rule would push into 2080-89.
+    """
+    cur_yy = dt.date.today().year % 100
+    return 2000 + yy if yy <= cur_yy else 1900 + yy
 
 def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
@@ -195,7 +206,7 @@ def normalize_record(parsed: dict) -> dict | None:
     cataloged_date = None
     if len(f008) >= 6 and f008[:6].isdigit():
         yy = int(f008[:2])
-        cataloged_date = f"{(1900 + yy) if yy >= 90 else (2000 + yy)}-{f008[2:4]}-{f008[4:6]}"
+        cataloged_date = f"{_marc_two_digit_year(yy)}-{f008[2:4]}-{f008[4:6]}"
     elif len(ctl.get("005", "")) >= 8 and ctl["005"][:8].isdigit():
         d = ctl["005"][:8]
         cataloged_date = f"{d[:4]}-{d[4:6]}-{d[6:8]}"

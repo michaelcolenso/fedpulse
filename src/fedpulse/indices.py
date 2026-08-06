@@ -21,6 +21,8 @@ from . import db
 OUT_DIR = Path(__file__).resolve().parents[2] / "data" / "outputs"
 
 API_Z_THRESHOLD = 2.5   # flag agencies at >= 2.5σ above baseline
+API_MIN_WEEKS = 6       # agency must appear in >= 6 distinct weeks of the window
+API_MIN_CURRENT = 3     # current-week count must be >= 3 to count as a real spike
 RCR_THRESHOLD = 5.0     # flag churn ratio >= 5:1
 RCR_MIN_FINALS = 3      # ignore ratios with tiny final counts
 TER_NEW_WINDOW_DAYS = 30
@@ -44,11 +46,19 @@ def _month_start(d: str | None) -> str:
 
 
 def compute_api(conn, as_of: str | None = None) -> dict:
-    """Agency Pulse Index: weekly counts per agency; z-score of current week vs prior 8 weeks."""
+    """Agency Pulse Index: weekly counts per agency; z-score of current week vs prior 8 weeks.
+
+    Only the last 16 weeks of records are needed (8-week baseline + current) —
+    filter in SQL instead of scanning the full catalog.
+    """
     as_of = as_of or dt.date.today().isoformat()
     as_of_day = dt.date.fromisoformat(as_of)
+    cutoff = (as_of_day - dt.timedelta(weeks=16)).isoformat()
     rows = conn.execute(
-        "SELECT agency, COALESCE(cataloged_date, publication_date, '') AS d FROM records WHERE agency IS NOT NULL AND agency != ''"
+        """SELECT agency, COALESCE(cataloged_date, publication_date, '') AS d FROM records
+           WHERE agency IS NOT NULL AND agency != ''
+             AND (cataloged_date >= ? OR (cataloged_date IS NULL AND publication_date >= ?))""",
+        (cutoff, cutoff),
     ).fetchall()
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for r in rows:
@@ -61,8 +71,8 @@ def compute_api(conn, as_of: str | None = None) -> dict:
         series = sorted(weeks.items())
         # keep last 16 weeks
         series = series[-16:]
-        if not series:
-            continue
+        if len(series) < API_MIN_WEEKS:
+            continue  # not enough presence history → not a measurable pulse
         vals = [c for _, c in series]
         cur = vals[-1] if vals else 0
         baseline = vals[:-1] if len(vals) > 1 else [0]
@@ -75,6 +85,7 @@ def compute_api(conn, as_of: str | None = None) -> dict:
         else:
             z = 0.0
         z_disp = round(min(z, 999.9), 2) if math.isfinite(z) else 999.9
+        flagged = z >= API_Z_THRESHOLD and cur >= API_MIN_CURRENT
         agencies.append({
             "agency": agency,
             "current_week": series[-1][0] if series else None,
@@ -82,7 +93,7 @@ def compute_api(conn, as_of: str | None = None) -> dict:
             "baseline_mean": round(mean, 2),
             "baseline_std": round(stdev, 2),
             "z_score": z_disp,
-            "flagged": z >= API_Z_THRESHOLD,
+            "flagged": flagged,
             "series": [{"week": w, "count": c} for w, c in series[-12:]],
         })
 
@@ -152,8 +163,9 @@ def compute_ter(conn, as_of: str | None = None) -> dict:
     # ACCELERATING: subject counts in last 4 weeks vs prior 8-week weekly mean (records table)
     rows = conn.execute(
         """SELECT subjects, COALESCE(cataloged_date, publication_date, '') AS d FROM records
-           WHERE subjects != '[]' AND subjects IS NOT NULL AND COALESCE(cataloged_date, publication_date, '') >= ?""",
-        (accel_start,),
+           WHERE subjects != '[]' AND subjects IS NOT NULL
+             AND (cataloged_date >= ? OR (cataloged_date IS NULL AND publication_date >= ?))""",
+        (accel_start, accel_start),
     ).fetchall()
     weekly: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for r in rows:
@@ -167,7 +179,6 @@ def compute_ter(conn, as_of: str | None = None) -> dict:
         for s in subs:
             weekly[s][ws] += 1
 
-    recent_weeks = sorted({w for w in weekly.values() for w in weekly.keys()})
     accel = []
     for subj, weeks in weekly.items():
         series = sorted(weeks.items())

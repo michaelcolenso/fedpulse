@@ -26,6 +26,8 @@ CREATE INDEX IF NOT EXISTS idx_records_agency_date ON records(agency, publicatio
 CREATE INDEX IF NOT EXISTS idx_records_sudoc_stem_date ON records(sudoc_stem, publication_date);
 CREATE INDEX IF NOT EXISTS idx_records_type_date ON records(doc_type, publication_date);
 CREATE INDEX IF NOT EXISTS idx_records_source ON records(source);
+CREATE INDEX IF NOT EXISTS idx_records_cataloged_date ON records(cataloged_date);
+CREATE INDEX IF NOT EXISTS idx_records_pub_date ON records(publication_date);
 
 -- Ingest bookkeeping: what we loaded and when, so nightly runs are idempotent.
 CREATE TABLE IF NOT EXISTS ingest_runs (
