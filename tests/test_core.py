@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from fedpulse import db, indices, marc_parser  # noqa: E402
+from fedpulse import db, fr_client, indices, marc_parser  # noqa: E402
 
 MARCXML_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
 <record xmlns="http://www.loc.gov/MARC21/slim">
@@ -183,6 +183,29 @@ class TestIndices(unittest.TestCase):
         ter = indices.compute_ter(self.conn, as_of=(base + dt.timedelta(days=30)).isoformat())
         new = [s for s in ter["new_subjects"] if s["subject"] == "Direct air capture"]
         self.assertEqual(len(new), 1)
+
+
+class TestFRMapping(unittest.TestCase):
+    def test_to_record_keeps_valid_ids(self):
+        doc = {
+            "document_number": "2026-16015",
+            "type": "Rule",
+            "title": "Example rule",
+            "publication_date": "2026-08-05",
+            "agencies": [{"name": "Environmental Protection Agency", "slug": "environmental-protection-agency"}],
+            "topics": ["Drinking water"],
+            "citation": "91 FR 50659",
+            "html_url": "https://example.gov/x",
+        }
+        rec = fr_client.to_record(doc)
+        self.assertEqual(rec["id"], "fr:2026-16015")
+        self.assertFalse(rec["id"].endswith(":"))  # must NOT be treated as malformed
+        self.assertEqual(rec["doc_type"], "rule")
+        self.assertEqual(rec["agency"], "Environmental Protection Agency")
+
+    def test_malformed_id_detected(self):
+        rec = fr_client.to_record({"document_number": None})
+        self.assertTrue(rec["id"].endswith(":"))  # the ingest guard skips these
 
 
 if __name__ == "__main__":

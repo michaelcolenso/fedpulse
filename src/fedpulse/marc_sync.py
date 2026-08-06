@@ -3,20 +3,22 @@ from GPO's maintenance repo when a new month lands.
 
 GPO pushes monthly files to:
   https://github.com/usgpo/cataloging-records-CGP-maintenance-files
-  → CGP_Records_Monthly_Files/{New_MARC_Records,Changed_MARC_Records,Deleted_Records_Lists}/…
+  → CGP_Records_Monthly_Files/
+      New_MARC_Records/     new_records_YYYYMM_<n>_utf8.mrc
+      Changed_MARC_Records/ changed_records_YYYYMM_<n>_utf8.mrc
+      Deleted_Records_Lists/ YYYYMM_deleted_records.csv   (System Number,OCLC)
 
-Naming convention (per GPO README): <YYYY-MM>_<set>.zip-ish — exact names are
-resolved at runtime from the GitHub API, so this survives GPO renaming.
-
-Design: list remote dir, take the newest filename per set, skip if we've already
-ingested that month (marker file), download to data/raw/monthly/, ingest.
-
-Network-dependent: called from nightly.sh with `|| true` so a blocked/absent
-network never breaks the FR leg.
+Design: list remote dir, take the newest month across all sets, skip if already
+ingested (marker file), download, ingest. Network-dependent — called from
+nightly.sh with `|| true` so a blocked network never breaks the FR leg.
 """
 from __future__ import annotations
 
+import csv
+import datetime as dt
+import io
 import json
+import re
 import shutil
 import sys
 import urllib.error
@@ -36,6 +38,8 @@ SETS = {
     "deleted": "Deleted_Records_Lists",
 }
 
+MONTH_RE = re.compile(r"(\d{4})(\d{2})")
+
 
 def _get_json(url: str) -> list[dict]:
     req = urllib.request.Request(url, headers=UA)
@@ -49,8 +53,21 @@ def _download(url: str, dest: Path) -> None:
         shutil.copyfileobj(resp, fh)
 
 
-def latest_month() -> str | None:
-    """Return the newest '<YYYY-MM>' appearing across the monthly subdirs, or None."""
+def _delete_from_csv(conn, path: Path) -> int:
+    """Delete records listed in GPO's System Number CSV."""
+    from . import db
+    deleted = 0
+    with open(path, newline="", encoding="utf-8-sig") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            sysno = (row.get("System Number") or "").strip()
+            if sysno and sysno.isdigit():
+                db.delete_record(conn, f"marc:{sysno}")
+                deleted += 1
+    return deleted
+
+
+def _available_months() -> list[str]:
     months: set[str] = set()
     for folder in SETS.values():
         try:
@@ -60,53 +77,66 @@ def latest_month() -> str | None:
                 continue
             raise
         for e in entries:
-            name = e.get("name", "")
-            if len(name) >= 7 and name[4] == "-" and name[:7][:4].isdigit():
-                months.add(name[:7])
-    return max(months) if months else None
+            m = MONTH_RE.search(e.get("name", ""))
+            if not m:
+                continue
+            y, mo = int(m.group(1)), int(m.group(2))
+            if 1990 <= y <= 2100 and 1 <= mo <= 12:
+                months.add(f"{y:04d}-{mo:02d}")
+    return sorted(months)
 
 
 def sync() -> int:
     RAW.mkdir(parents=True, exist_ok=True)
-    month = latest_month()
-    if not month:
+    months = _available_months()
+    if not months:
         print("marc_sync: no monthly files found")
         return 0
     try:
         done = json.loads(MARKER.read_text()) if MARKER.exists() else {}
     except (json.JSONDecodeError, OSError):
         done = {}
-    if done.get("month") == month:
-        return 0  # already ingested this month
+    done_month = done.get("month")
+    latest = months[-1]
+    if done_month == latest:
+        return 0  # already current
+    if done_month:
+        target = [m for m in months if m > done_month]
+    else:
+        target = months  # first run: ingest everything available
+    print(f"marc_sync: ingesting {target[0]}..{target[-1]} ({len(target)} months)")
 
-    print(f"marc_sync: new month {month} — downloading delta")
-    files: list[tuple[str, Path]] = []
-    for kind, folder in SETS.items():
-        entries = _get_json(f"{API}/{folder}")
-        for e in entries:
-            if e.get("name", "").startswith(month):
-                dest = RAW / kind / e["name"]
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                _download(e["download_url"], dest)
-                files.append((kind, dest))
-
-    # Ingest (delegates to ingest.py's loader) then mark the month done.
     from . import db, ingest
     conn = db.connect(ROOT / "data" / "fedpulse.db")
     db.init_db(conn)
-    counts = {"new": 0, "changed": 0, "deleted": 0}
-    for kind, path in files:
-        if zipfile.is_zipfile(path):
-            extract_dir = path.with_suffix("")
-            with zipfile.ZipFile(path) as z:
-                z.extractall(extract_dir)
-            res = ingest._load_marc_dir(conn, extract_dir, kind)
-        else:
-            res = ingest._load_marc_dir(conn, path.parent, kind)
-        counts[kind] += res.get("new", 0) + res.get("changed", 0) + res.get("deleted", 0)
+    totals = {"new": 0, "changed": 0, "deleted": 0}
+
+    for month in target:
+        compact = month.replace("-", "")
+        for kind, folder in SETS.items():
+            entries = _get_json(f"{API}/{folder}")
+            for e in entries:
+                name = e.get("name", "")
+                if compact not in name:
+                    continue
+                dest = RAW / kind / month / name
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if not dest.exists() or dest.stat().st_size != e.get("size"):
+                    _download(e["download_url"], dest)
+                if kind == "deleted" and dest.suffix.lower() == ".csv":
+                    totals["deleted"] += _delete_from_csv(conn, dest)
+                    continue
+                if zipfile.is_zipfile(dest):
+                    extract_dir = dest.with_suffix("")
+                    with zipfile.ZipFile(dest) as z:
+                        z.extractall(extract_dir)
+                    res = ingest._load_marc_dir(conn, extract_dir, kind)
+                else:
+                    res = ingest._load_marc_dir(conn, dest.parent, kind)
+                totals[kind] += res.get("new", 0) + res.get("changed", 0) + res.get("deleted", 0)
     conn.close()
-    MARKER.write_text(json.dumps({"month": month, "at": __import__("datetime").date.today().isoformat()}))
-    print(f"marc_sync: ingested {month} ({sum(counts.values())} ops)")
+    MARKER.write_text(json.dumps({"month": latest, "at": dt.date.today().isoformat()}))
+    print(f"marc_sync: ingested through {latest} ({sum(totals.values())} ops)")
     return 0
 
 

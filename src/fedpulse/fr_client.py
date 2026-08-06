@@ -11,6 +11,7 @@ import json
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Iterator
 
 BASE = "https://www.federalregister.gov/api/v1"
 USER_AGENT = "FedPulse/0.1 (regulatory metadata index; contact: michael@fedpulse.local)"
@@ -28,7 +29,6 @@ FIELDS = [
     "raw_text_url",
     "abstract",
     "action",
-    "sections",
     "significant",
     "docket_ids",
 ]
@@ -39,17 +39,19 @@ class FRAPIError(RuntimeError):
 
 
 def _get(path: str, params: dict) -> dict:
-    qs = urllib.parse.urlencode(params)
+    # doseq=True: repeat keys for list values (e.g. fields[]=a&fields[]=b)
+    qs = urllib.parse.urlencode(params, doseq=True)
     url = f"{BASE}{path}?{qs}"
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def fetch_range(start: str, end: str, per_page: int = 1000) -> list[dict]:
+def fetch_range(start: str, end: str, per_page: int = 200) -> list[dict]:
     """Fetch all FR documents with publication_date in [start, end] (ISO dates).
 
-    Slices by day if a range exceeds the API's 50-page cap.
+    FR API caps per_page at 200 and total_pages at 50 (10k docs/query max);
+    callers slice by month so that cap is never hit.
     """
     out: list[dict] = []
     page = 1
@@ -79,30 +81,26 @@ def pull_days(days: int = 3) -> list[dict]:
     return fetch_range(start, today.isoformat())
 
 
-def backfill(start: str, end: str | None = None) -> list[dict]:
-    """Backfill documents from start to end (ISO dates; default end = today).
+def backfill(start: str, end: str | None = None) -> Iterator[list[dict]]:
+    """Yield FR documents month-by-month from start to end (ISO dates).
 
-    Iterates month-by-month to stay under the 50-page/query cap.
+    Generator: yields one month's docs at a time so callers can commit and
+    free memory incrementally instead of buffering the whole history.
     """
     if end is None:
         end = dt.date.today().isoformat()
-    out: list[dict] = []
     cur = dt.date.fromisoformat(start)
     end_date = dt.date.fromisoformat(end)
     while cur <= end_date:
-        month_end = min(cur.replace(day=28) + dt.timedelta(days=4), end_date)  # safe month roll
-        month_end = month_end.replace(day=1) + dt.timedelta(days=32)
-        month_end = (month_end.replace(day=1) - dt.timedelta(days=1)).replace(
-            day=min(month_end.day, 31)
-        )
+        month_end = (cur.replace(day=28) + dt.timedelta(days=4))
+        month_end = month_end.replace(day=1) - dt.timedelta(days=1)
         if month_end > end_date:
             month_end = end_date
         chunk = fetch_range(cur.isoformat(), month_end.isoformat())
-        out.extend(chunk)
-        print(f"  {cur.isoformat()}..{month_end.isoformat()}: {len(chunk)} docs")
+        print(f"  {cur.isoformat()}..{month_end.isoformat()}: {len(chunk)} docs", flush=True)
+        yield chunk
         cur = month_end + dt.timedelta(days=1)
         time.sleep(SLEEP)
-    return out
 
 
 def to_record(doc: dict) -> dict:
@@ -117,8 +115,9 @@ def to_record(doc: dict) -> dict:
     topics = [t for t in (doc.get("topics") or []) if t]
     abstract = doc.get("abstract") or ""
     action = doc.get("action") or ""
+    doc_number = doc.get("document_number") or ""  # None → "" so malformed ids are detectable
     return {
-        "id": f"fr:{doc.get('document_number', '')}",
+        "id": f"fr:{doc_number}",
         "source": "fr",
         "title": doc.get("title"),
         "agency": agency,

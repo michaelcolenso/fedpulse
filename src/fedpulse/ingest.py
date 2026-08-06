@@ -28,28 +28,36 @@ def get_conn() -> db.sqlite3.Connection:
 
 def ingest_fr(conn, days: int | None = None, backfill_start: str | None = None) -> dict:
     run_id = db.start_run(conn, "fr")
-    docs: list[dict] = []
+    new = changed = 0
+    total = 0
+
+    def process_docs(docs: list[dict]) -> None:
+        nonlocal new, changed, total
+        for doc in docs:
+            rec = fr_client.to_record(doc)
+            if rec["id"].endswith(":"):  # malformed id (empty document_number) — skip
+                continue
+            cur = conn.execute("SELECT id FROM records WHERE id = ?", (rec["id"],)).fetchone()
+            db.upsert_record(conn, rec)
+            if cur:
+                changed += 1
+            else:
+                new += 1
+                db.note_subjects(conn, rec["id"], rec["cataloged_date"] or "", rec["agency"] or "", rec["subjects"])
+        total += len(docs)
+
     if backfill_start:
         print(f"Backfilling FR from {backfill_start} ...")
-        docs = fr_client.backfill(backfill_start)
+        for chunk in fr_client.backfill(backfill_start):
+            process_docs(chunk)
+            conn.commit()  # commit per month: crash-safe + no long write lock
     else:
-        docs = fr_client.pull_days(days or 3)
-    new = changed = 0
-    for doc in docs:
-        rec = fr_client.to_record(doc)
-        if not rec["id"].endswith(":"):
-            continue
-        cur = conn.execute("SELECT id FROM records WHERE id = ?", (rec["id"],)).fetchone()
-        db.upsert_record(conn, rec)
-        if cur:
-            changed += 1
-        else:
-            new += 1
-            db.note_subjects(conn, rec["id"], rec["cataloged_date"] or "", rec["agency"] or "", rec["subjects"])
-    conn.commit()
-    db.finish_run(conn, run_id, "ok", new=new, changed=changed, notes=f"{len(docs)} docs")
-    print(f"FR ingest: {new} new, {changed} changed, {len(docs)} total")
-    return {"new": new, "changed": changed, "total": len(docs)}
+        process_docs(fr_client.pull_days(days or 3))
+        conn.commit()
+
+    db.finish_run(conn, run_id, "ok", new=new, changed=changed, notes=f"{total} docs")
+    print(f"FR ingest: {new} new, {changed} changed, {total} total")
+    return {"new": new, "changed": changed, "total": total}
 
 
 def _load_marc_dir(conn, directory: Path, kind: str) -> dict:
