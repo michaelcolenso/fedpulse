@@ -1,0 +1,13 @@
+# data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# misc
+.DS_Store
