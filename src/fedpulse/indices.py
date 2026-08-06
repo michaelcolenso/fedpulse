@@ -162,12 +162,13 @@ def compute_ter(conn, as_of: str | None = None) -> dict:
 
     # ACCELERATING: subject counts in last 4 weeks vs prior 8-week weekly mean (records table)
     rows = conn.execute(
-        """SELECT subjects, COALESCE(cataloged_date, publication_date, '') AS d FROM records
+        """SELECT subjects, COALESCE(cataloged_date, publication_date, '') AS d, agency FROM records
            WHERE subjects != '[]' AND subjects IS NOT NULL
              AND (cataloged_date >= ? OR (cataloged_date IS NULL AND publication_date >= ?))""",
         (accel_start, accel_start),
     ).fetchall()
     weekly: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    agencies_by_subject: dict[str, set[str]] = defaultdict(set)
     for r in rows:
         ws = _week_start(r["d"])
         if not ws:
@@ -178,6 +179,8 @@ def compute_ter(conn, as_of: str | None = None) -> dict:
             continue
         for s in subs:
             weekly[s][ws] += 1
+            if r["agency"]:
+                agencies_by_subject[s].add(r["agency"])
 
     accel = []
     for subj, weeks in weekly.items():
@@ -189,12 +192,15 @@ def compute_ter(conn, as_of: str | None = None) -> dict:
         if not baseline:
             continue
         weekly_mean = sum(c for _, c in baseline) / len(baseline)
-        if weekly_mean > 0 and cur4 >= 4 and cur4 / (weekly_mean * 4) >= TER_ACCEL_MULT:
+        distinct = len(agencies_by_subject.get(subj, set()))
+        # require >=2 distinct agencies in the window to filter batch/series artifacts
+        if weekly_mean > 0 and cur4 >= 4 and distinct >= 2 and cur4 / (weekly_mean * 4) >= TER_ACCEL_MULT:
             accel.append({
                 "subject": subj,
                 "last_4w_count": cur4,
                 "prior_weekly_mean": round(weekly_mean, 2),
                 "multiple": round(cur4 / (weekly_mean * 4), 2),
+                "distinct_agencies": distinct,
             })
     accel.sort(key=lambda a: a["multiple"], reverse=True)
 
