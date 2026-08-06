@@ -137,8 +137,8 @@ def to_record(doc: dict) -> dict:
             "abstract": abstract[:500],
             "action": action[:500],
             "significant": doc.get("significant"),
-            "sections": doc.get("sections"),
             "docket_ids": doc.get("docket_ids"),
             "raw_text_url": doc.get("raw_text_url"),
+            "agencies": agencies,  # keep full agency list for re-attribution
         },
     }

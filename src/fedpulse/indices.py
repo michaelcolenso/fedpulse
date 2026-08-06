@@ -23,7 +23,8 @@ OUT_DIR = Path(__file__).resolve().parents[2] / "data" / "outputs"
 API_Z_THRESHOLD = 2.5   # flag agencies at >= 2.5σ above baseline
 API_MIN_WEEKS = 6       # agency must appear in >= 6 distinct weeks of the window
 API_MIN_CURRENT = 3     # current-week count must be >= 3 to count as a real spike
-RCR_THRESHOLD = 5.0     # flag churn ratio >= 5:1
+RCR_THRESHOLD = 5.0     # flag churn ratio >= 5:1 (absolute)
+RCR_Z_THRESHOLD = 2.5   # flag when RCR z-score vs own 12-month history >= 2.5σ
 RCR_MIN_FINALS = 3      # ignore ratios with tiny final counts
 TER_NEW_WINDOW_DAYS = 30
 TER_ACCEL_MULT = 2.0
@@ -102,40 +103,79 @@ def compute_api(conn, as_of: str | None = None) -> dict:
 
 
 def compute_rcr(conn, as_of: str | None = None) -> dict:
-    """Regulatory Churn Ratio per agency (FR docs only): (proposed+notice)/final, 12-month rolling."""
+    """Regulatory Churn Ratio per agency (FR docs only): (proposed+notice)/final.
+
+    Computes the ratio over 24 overlapping 12-month windows ending at each
+    month-end. Flags when the CURRENT ratio is >=2.5σ above the agency's own
+    history (relative churn — works for high-volume agencies like EPA) OR the
+    absolute ratio is >= 5:1 (drafting-mode alarm).
+    """
     as_of = as_of or dt.date.today().isoformat()
     end = dt.date.fromisoformat(as_of)
-    start = end - dt.timedelta(days=365)
+    hist_start = end - dt.timedelta(days=730)  # 24 months for baseline windows
     rows = conn.execute(
         """SELECT agency, doc_type, publication_date FROM records
            WHERE source='fr' AND doc_type IS NOT NULL AND publication_date >= ? AND publication_date <= ?""",
-        (start.isoformat(), end.isoformat()),
+        (hist_start.isoformat(), end.isoformat()),
     ).fetchall()
-    agg: dict[str, dict[str, int]] = defaultdict(lambda: {"rule": 0, "proposed_rule": 0, "notice": 0, "other": 0})
+
+    # per agency: list of (month_start, proposed, notice, final)
+    events: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for r in rows:
         t = r["doc_type"].lower().replace("-", "_").replace(" ", "_")
-        if t in ("rule", "proposed_rule", "notice"):
-            agg[r["agency"]][t] += 1
-        else:
-            agg[r["agency"]]["other"] += 1
+        if t in ("rule", "proposed_rule", "notice") and r["agency"]:
+            events[r["agency"]].append((t, r["publication_date"]))
+
+    month_ends = []
+    d = end.replace(day=28) + dt.timedelta(days=4)
+    for _ in range(24):
+        d = d.replace(day=1) - dt.timedelta(days=1)
+        month_ends.append(d)
+    month_ends.reverse()
 
     out = []
-    for agency, c in agg.items():
-        numerator = c["proposed_rule"] + c["notice"]
-        denominator = c["rule"]
-        ratio = numerator / denominator if denominator >= RCR_MIN_FINALS else None
+    for agency, evs in events.items():
+        series = []
+        for me in month_ends:
+            win_start = (me - dt.timedelta(days=365)).isoformat()
+            me_iso = me.isoformat()
+            props = sum(1 for t, d in evs if t == "proposed_rule" and win_start <= d <= me_iso)
+            notices = sum(1 for t, d in evs if t == "notice" and win_start <= d <= me_iso)
+            finals = sum(1 for t, d in evs if t == "rule" and win_start <= d <= me_iso)
+            ratio = (props + notices) / finals if finals >= RCR_MIN_FINALS else None
+            series.append({"window_end": me_iso, "proposed": props, "notices": notices, "final": finals, "ratio": ratio})
+
+        finite = [s["ratio"] for s in series if s["ratio"] is not None]
+        if not finite:
+            continue
+        cur = series[-1]
+        cur_ratio = cur["ratio"]
+        baseline = finite[:-1]
+        mean = statistics.mean(baseline) if len(baseline) >= 3 else 0.0
+        stdev = statistics.stdev(baseline) if len(baseline) > 3 else 0.0
+        if stdev > 0 and cur_ratio is not None:
+            z = (cur_ratio - mean) / stdev
+        elif cur_ratio is not None and cur_ratio > mean and len(baseline) >= 3:
+            z = float("inf")
+        else:
+            z = 0.0
+        z_disp = round(min(z, 99.9), 2) if math.isfinite(z) else 99.9
+        flagged = (z >= RCR_Z_THRESHOLD) or (cur_ratio is not None and cur_ratio >= RCR_THRESHOLD)
         out.append({
             "agency": agency,
-            "window_start": start.isoformat(),
-            "window_end": end.isoformat(),
-            "final_rules": c["rule"],
-            "proposed_rules": c["proposed_rule"],
-            "notices": c["notice"],
-            "other": c["other"],
-            "churn_ratio": round(ratio, 2) if ratio is not None else None,
-            "flagged": ratio is not None and ratio >= RCR_THRESHOLD,
+            "window_start": series[-1]["window_end"][:8] + "01" if series else None,
+            "window_end": series[-1]["window_end"] if series else None,
+            "final_rules": cur["final"],
+            "proposed_rules": cur["proposed"],
+            "notices": cur["notices"],
+            "other": 0,
+            "churn_ratio": round(cur_ratio, 2) if cur_ratio is not None else None,
+            "z_score": z_disp,
+            "baseline_mean": round(mean, 2),
+            "flagged": flagged,
+            "series": series[-12:],
         })
-    out.sort(key=lambda a: (a["flagged"], a["churn_ratio"] or -1), reverse=True)
+    out.sort(key=lambda a: (a["flagged"], a["z_score"] or -1), reverse=True)
     return {"as_of": as_of, "window_days": 365, "threshold": RCR_THRESHOLD, "agencies": out}
 
 
