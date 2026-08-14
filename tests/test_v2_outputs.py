@@ -38,4 +38,8 @@ class TestDigest(unittest.TestCase):
         self.assertTrue(text.strip()); self.assertIn("TODAY",text)
         self.assertNotIn("low",text.lower())
 
+    def test_low_confidence_packages_are_dashboard_only(self):
+        brief = build_brief({"health":{"source_freshness":{}},"daily_activity":{"items":[]},"packages":{"items":[{"package_id":"low-1","confidence":"low","label":"uncertain"}]},"standalone":{"items":[]},"fr_metrics":{"items":[]},"marc_horizon":{"items":[]}})
+        self.assertFalse(any(section["section"] == "high_medium_packages" for section in brief["items"]))
+
 if __name__ == "__main__": unittest.main()
