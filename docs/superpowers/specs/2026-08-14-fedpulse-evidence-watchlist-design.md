@@ -139,6 +139,9 @@ ALTER TABLE records ADD COLUMN canonical_agency_name TEXT;
 - No fuzzy matching.
 - Unmapped values retain their raw agency and receive `canonical_agency_id = NULL`.
 - Every mapping records its method: `fr_id`, `exact_alias`, `normalized_exact`, or `unmapped`.
+- `normalized_exact` is restricted to Unicode normalization, case folding, harmless punctuation, whitespace, and documented terminal jurisdiction markers such as `(U.S.)`; it must never become fuzzy matching.
+
+Package grouping normally uses the most specific canonical child agency. Parent-level grouping is allowed only when a coherent candidate contains records from at least two distinct child agencies with the same parent and those records share an exact topic or a direction-plus-sector pair. A single-child package displays the child; a cross-child package displays the parent and lists every participating child.
 
 ### 5.4 Initial alias scope
 
@@ -161,22 +164,50 @@ Generate candidate groups from FR records published in the last 14 days using:
 - fixed action-direction tags;
 - fixed sector tags.
 
+A same-day, same-family batch may nominate records for coherence testing, but it is not sufficient evidence of a package.
+
 ### 6.3 Deterministic grouping rules
 
-Records join the same package when all required rules hold:
+Two records receive a package edge only when all required rules hold:
 
-1. Same canonical agency.
-2. Publication dates are no more than three days apart.
-3. At least one coordination condition holds:
-   - three or more records share the same publication date and document family;
-   - two or more records share at least one exact Federal Register topic;
-   - two or more records share the same deterministic direction tag and at least one sector tag.
+1. Same canonical child agency, or an eligible coherent parent-level grouping under section 5.3.
+2. Publication dates fall inside the same inclusive three-calendar-day window.
+3. At least one coherence condition holds:
+   - the records share at least one exact Federal Register topic; or
+   - the records share the same deterministic direction tag and at least one exact sector tag.
 
-Connected records are grouped with union-find. Packages with only two records require a shared topic or shared direction-plus-sector evidence; a same-day pair alone is insufficient.
+Same-day/same-family evidence alone never creates an edge. Three unrelated notices from one agency on one day do not form a package.
 
-### 6.4 Direction classification
+Union-find may identify initial connected components, but transitive closure may not stretch the date boundary. For each component, sort records by publication date and deterministically partition it into non-overlapping, earliest-first windows where `latest_date - earliest_date <= 2 days`. Re-run the coherence check inside each partition. No emitted package may span more than three calendar dates.
+
+Packages require at least two records. A two-record package requires both a shared exact topic and a shared direction-plus-sector pair; packages of three or more require at least one of those coherence forms.
+
+### 6.4 Stable identity and versions
+
+A package has a stable logical identity and immutable versions.
+
+The logical `package_id` is assigned when a cluster first qualifies, processing records chronologically, and is then immutable:
+
+```text
+canonical_coordination_agency_id + earliest_publication_date + core_cluster_key
+```
+
+`core_cluster_key` is a 12-character SHA-256 prefix over a versioned canonical string derived from the strongest shared evidence among the records in the first qualifying version:
+
+1. lexicographically first dominant exact topic, when one is shared by a majority of members; otherwise
+2. dominant direction plus lexicographically first shared sector.
+
+The identity does not hash all member IDs, so ordinary membership growth within the same coherent cluster does not create an unrelated logical package. The initial core key is persisted and never recomputed from later membership. A full rebuild reproduces identity by replaying records in publication-date and record-ID order.
+
+Each emitted state also has a `package_version_id`, calculated from `package_id`, sorted member record IDs, direction, confidence, and dictionary/mapping versions. Membership, direction, or confidence changes create a new immutable version with `supersedes_version_id` pointing to the prior version. Unchanged membership and classifications reproduce the same version ID. Lifecycle state is keyed by logical `package_id`.
+
+Membership change is materially notifiable only when it adds at least two records, increases membership by at least 25%, introduces a higher-priority document family, or changes direction or confidence. Every version remains visible in audit history.
+
+### 6.5 Direction classification
 
 Direction is derived only from Federal Register `action`, `title`, and `abstract` metadata using a versioned fixed phrase dictionary. It does not read full document text.
+
+Matching uses Unicode normalization, case folding, token/phrase boundaries, and deterministic diacritic handling. A negation marker (`not`, `no`, `never`, `without`) within the preceding three tokens blocks a match unless a longer explicit dictionary phrase defines the intended meaning. For example, `not proposing to remove` must not produce `reduce_or_rescind`. Exact multiword phrases are evaluated before single-token entries.
 
 Initial direction tags:
 
@@ -190,7 +221,9 @@ Initial direction tags:
 
 A package receives a direction when at least 60% of its records share one tag. Otherwise it is `mixed_or_unknown`. The output includes matched phrases so the classification is auditable.
 
-### 6.5 Sector and affected-party tags
+Every output includes `direction_dictionary_version`.
+
+### 6.6 Sector and affected-party tags
 
 Affected sectors come from a versioned deterministic map:
 
@@ -200,19 +233,29 @@ Affected sectors come from a versioned deterministic map:
 
 Examples include credit unions, banking, hazardous-material carriers, agriculture, food manufacturing, healthcare, cybersecurity, aviation, energy, and government contractors.
 
-The output calls these **coverage tags**, not inferred economic impacts. If no mapping exists, the package says `sector_tags: []`.
+Federal Register topic mappings are manually reviewed. Title mappings use exact token-boundary phrases, never substrings. Agency defaults are deliberately small and conservative.
 
-### 6.6 Package confidence
+The output calls these **coverage tags**, not inferred economic impacts. If no mapping exists, the package says `sector_tags: []`. Every tag contains provenance:
+
+```json
+{
+  "sector": "credit_union",
+  "source": "exact_fr_topic",
+  "matched_value": "Credit unions"
+}
+```
+
+### 6.7 Package confidence
 
 Confidence expresses evidence quality, not predicted impact.
 
-- **High:** at least five records, or at least three records with shared topic and shared direction; canonical agency known; all official URLs present.
-- **Medium:** at least three same-day/same-family records with canonical agency known, or two records sharing topic plus direction.
+- **High:** at least three records; a shared exact topic or shared direction-plus-sector pair; at least 60% direction coherence; canonical agency known; all official URLs present.
+- **Medium:** at least three records satisfying one coherence form from section 6.3 with canonical agency known but missing one high-confidence requirement, or two records satisfying both the shared-topic and direction-plus-sector requirements.
 - **Low:** package passes minimum grouping but has weak topic cohesion, missing agency mapping, or incomplete URLs.
 
-No statistical z-score can raise a low-evidence package to high confidence.
+Record count alone never creates high confidence. The medium rule still requires the package-edge coherence rules in section 6.3; same-day/same-family is not sufficient. No statistical z-score can raise a low-evidence package to high confidence.
 
-### 6.7 Package priority
+### 6.8 Package priority
 
 Priority orders the watchlist; it does not imply business impact. The score is an additive, published rubric:
 
@@ -243,16 +286,28 @@ Each match reports the exact rule that selected it. No runtime semantic inferenc
 
 ## 8. Supporting metrics
 
-### 8.1 FR weekly activity spike
+### 8.1 Time and week conventions
+
+- The Federal Register publication week is Monday through Friday in `America/New_York`.
+- A complete week contains all five publication days; federal holidays remain zero-count days rather than disappearing from the series.
+- The partial current week runs from Monday through the latest available FR publication date and appears in daily activity only; it is never anomaly-scored.
+- `as_of` is an Eastern calendar date and every output includes `as_of_timezone: "America/New_York"`.
+- `generated_at` is an ISO-8601 UTC timestamp ending in `Z` and every output includes `generated_at_timezone: "UTC"`.
+- Week labels use the Monday start date. These definitions must be identical in code, tests, output metadata, and documentation.
+
+### 8.2 FR weekly activity spike
 
 - Federal Register records only.
-- Complete calendar weeks, including zero-count weeks.
+- Complete Monday–Friday publication weeks, including zero-count weeks.
 - Latest complete week compared with the preceding 16 complete weeks.
-- Require at least eight weeks of history and at least three current records.
-- Report current count, baseline mean, baseline standard deviation, z-score, and source count.
+- Require at least eight complete weeks of history and at least three current records.
+- Always report baseline sample size, complete raw weekly counts, current count, baseline mean, and baseline standard deviation.
+- When baseline mean is at least five and standard deviation is positive, report a z-score and require z ≥ 2.5.
+- When baseline mean is below five, use an exact Poisson upper-tail probability computed with the standard library; require `p <= 0.01`, current count ≥ 5, and an absolute increase of at least three over the baseline mean.
+- When baseline standard deviation is zero, do not emit a numeric z-score or z-score alert. Report `statistical_evidence: insufficient_zero_variance`; a low-count Poisson result may be shown only as a separate method when its prerequisites hold.
 - Partial weeks appear in daily counts but never in spike scoring.
 
-### 8.2 Sustained level shift
+### 8.3 Sustained level shift
 
 Detect sustained output mode separately from a one-week spike:
 
@@ -260,21 +315,28 @@ Detect sustained output mode separately from a one-week spike:
 - Require at least 50% increase, a minimum absolute increase of four records, and activity in at least three of the four recent weeks.
 - Report both window totals and per-week rates.
 
-### 8.3 Rulemaking-pipeline transition
+### 8.4 Rulemaking-pipeline transition
 
-RCR remains `(proposed rules + notices) / final rules` over rolling 12-month windows, FR only.
+Two FR-only rolling 12-month ratios are reported:
+
+- `proposal_to_final_ratio = proposed_rules / final_rules`, the primary rulemaking-pipeline measure;
+- `activity_to_final_ratio = (proposed_rules + notices) / final_rules`, a broader workload/churn measure formerly called RCR.
 
 Changes:
 
 - Minimum denominator: at least 10 final rules, or at least 50 total counted documents and at least five final rules.
+- Require at least 12 eligible historical monthly windows before computing an agency-history z-score.
 - Compute cross-agency percentile among eligible agencies.
 - A new alert requires either:
   - z-score ≥ 2.5 against the agency's own history and current percentile ≥ 80; or
-  - current percentile ≥ 95 and a material increase from the prior month.
+  - current percentile ≥ 95 and current ratio at least 1.25 times the prior-month ratio.
+- If historical standard deviation is zero or fewer than 12 eligible windows exist, suppress the history z-score rather than manufacturing an extreme value. The cross-sectional path still requires the explicit 1.25× month-over-month increase.
 - Persistent conditions do not repeatedly notify.
 - Report `newly_elevated`, `continuing`, or `resolved`.
 
-### 8.4 MARC horizon confidence
+The primary alert is based on `proposal_to_final_ratio`. `activity_to_final_ratio` remains visible as context and may receive a separately named workload alert, but it may not be labeled a rulemaking-pipeline transition.
+
+### 8.5 MARC horizon confidence
 
 TER remains MARC only and reports:
 
@@ -285,7 +347,7 @@ TER remains MARC only and reports:
 - same-day concentration;
 - top source records.
 
-A heading is high confidence only when activity spans at least three canonical agencies and no single cataloging day contributes more than 50% of recent records. Batch-heavy headings remain visible but are labeled `catalog_batch_risk`.
+A heading is high confidence only when the last four weeks contain at least 10 records across at least three distinct cataloging dates and three canonical agencies, and no single cataloging day contributes more than 50% of recent records. Batch-heavy or smaller headings remain visible but are labeled `catalog_batch_risk` or insufficient-sample confidence as appropriate.
 
 ## 9. Signal lifecycle and persistence
 
@@ -301,6 +363,22 @@ CREATE TABLE signal_state (
     last_notified TEXT,
     fingerprint TEXT NOT NULL,
     payload_json TEXT NOT NULL
+);
+
+CREATE TABLE package_versions (
+    package_version_id TEXT PRIMARY KEY,
+    package_id TEXT NOT NULL,
+    supersedes_version_id TEXT,
+    created_at TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    confidence TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+
+CREATE TABLE package_version_records (
+    package_version_id TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    PRIMARY KEY (package_version_id, record_id)
 );
 
 CREATE TABLE pipeline_state (
@@ -319,7 +397,16 @@ Lifecycle rules:
 - `resolved`: previously qualified but no longer qualifies;
 - `stale`: source data or computation is outside freshness limits.
 
-Telegram includes new, materially changed, resolved, and stale signals. The dashboard includes all states.
+Material change is type-specific:
+
+- packages: membership thresholds defined in section 6.4, direction change, confidence change, or a higher-priority document family;
+- rulemaking/workload metrics: transition between elevated and normal, not ordinary ratio or z-score movement;
+- FR activity: transition into or out of spike/level-shift state, not a score-only change;
+- MARC horizon: confidence-state change or at least 25% growth with three or more added records.
+
+The same logical signal may not notify again within 48 hours unless its direction or confidence changes, it gains a higher-priority document family, or it becomes stale/resolved. Score movement alone never bypasses the cooldown.
+
+Telegram includes new, materially changed, resolved, and stale signals. Low-confidence packages are dashboard-only and never appear in the daily brief. The dashboard includes all states and version history.
 
 ## 10. Output contracts
 
@@ -339,9 +426,28 @@ Every file includes:
 {
   "schema_version": 2,
   "generated_at": "ISO-8601 timestamp",
+  "generated_at_timezone": "UTC",
   "as_of": "YYYY-MM-DD",
+  "as_of_timezone": "America/New_York",
   "source_freshness": {},
   "items": []
+}
+```
+
+`source_freshness` has an explicit per-feed contract:
+
+```json
+{
+  "federal_register": {
+    "last_publication_date": "2026-08-06",
+    "fetched_at": "2026-08-07T05:02:03Z",
+    "status": "fresh"
+  },
+  "marc": {
+    "last_cataloged_date": "2026-07-31",
+    "maintenance_applied_at": "2026-08-07T05:05:00Z",
+    "status": "degraded"
+  }
 }
 ```
 
@@ -358,7 +464,7 @@ Every package item includes:
 - priority score components;
 - lifecycle state;
 - supporting metrics;
-- complete evidence list containing title, type, publication date, and official URL.
+- complete evidence list containing source record ID, title, type, publication date, official URL, and the exact metadata fields and matched values used for grouping, direction, coverage tags, confidence, priority, or watchlist selection.
 
 The label is constructed from structured fields, for example:
 
@@ -379,6 +485,8 @@ Required order:
 5. Consequential standalone watchlist matches.
 6. Newly elevated or resolved supporting metrics.
 7. MARC horizon changes only when new monthly data exists.
+
+Low-confidence packages never appear in the daily brief. They remain available on the dashboard with their confidence reasons.
 
 The brief never prints a list of 50 continuing RCR conditions. It links to the dashboard for continuing states.
 
@@ -480,8 +588,12 @@ Create sanitized metadata fixtures representing:
 - the PHMSA hazardous-material package;
 - the CDC international funding round;
 - the NIST standalone RFI;
-- an unrelated same-day agency batch that must not group;
-- a MARC catalog batch that must be downgraded.
+- three unrelated same-day/same-family notices from one agency that must not group;
+- a transitive date chain on days 1, 3, and 5 that must be split into globally bounded clusters;
+- a negated direction phrase (`not proposing to remove`) that must not classify as `reduce_or_rescind`;
+- a zero-variance baseline that must not emit a numeric z-score alert;
+- a three-record/two-day MARC batch that must not become high confidence;
+- a larger concentrated MARC catalog batch that must be downgraded.
 
 Tests must not require network access or the production database.
 
@@ -490,6 +602,7 @@ Tests must not require network access or the production database.
 Evaluation is separate from unit tests and package usefulness.
 
 - Freeze event definitions before threshold tuning.
+- Pre-register event dates, expected signal classes, minimum lead times, and negative controls in a versioned repository fixture before running or tuning the evaluation.
 - RCR/API signals count as early only when they fire at least 30 days before an event.
 - Scan the preceding 12–24 months instead of testing only the event date.
 - TER counts only when first seen on or before the comparison event.
@@ -528,6 +641,14 @@ FedPulse v0.2 is ready for internal release only when:
 15. A real pipeline run succeeds under the cron environment.
 16. The dashboard renders the new outputs and exposes evidence links without browser-console errors.
 17. Documentation describes FedPulse as monitoring and prioritization, not pre-public prediction.
+18. Three unrelated same-day/same-family notices from one agency do not form a high- or medium-confidence package and never enter the daily brief.
+19. No package spans more than three inclusive publication dates after connected-component partitioning.
+20. A zero-variance baseline never produces a numeric z-score alert and is reported as insufficient statistical evidence.
+21. The complete Monday–Friday Eastern publication-week definition is identical in code, tests, outputs, and documentation.
+22. An unchanged package reproduces the same package and version IDs; a material membership change creates a deterministic new version with `supersedes_version_id`.
+23. MARC high confidence requires at least 10 records, three cataloging dates, three canonical agencies, and no single date above 50% concentration.
+24. Direction classification handles word boundaries and three-token negation windows, including the required counterexample.
+25. Low-confidence packages never appear in the daily brief.
 
 ## 17. Scope boundaries
 
