@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Iterator
 
+from .taxonomy import canonicalize_agency
 BASE = "https://www.federalregister.gov/api/v1"
 USER_AGENT = "FedPulse/0.1 (regulatory metadata index; contact: michael@fedpulse.local)"
 SLEEP = 0.4  # seconds between requests — be a good citizen
@@ -119,6 +120,16 @@ def to_record(doc: dict) -> dict:
     abstract = doc.get("abstract") or ""
     action = doc.get("action") or ""
     doc_number = doc.get("document_number") or ""  # None → "" so malformed ids are detectable
+    raw = {
+        "citation": doc.get("citation"),
+        "abstract": abstract[:500],
+        "action": action[:500],
+        "significant": doc.get("significant"),
+        "docket_ids": doc.get("docket_ids"),
+        "raw_text_url": doc.get("raw_text_url"),
+        "agencies": agencies,
+    }
+    identity = canonicalize_agency("fr", agency or "", raw)
     return {
         "id": f"fr:{doc_number}",
         "source": "fr",
@@ -132,13 +143,7 @@ def to_record(doc: dict) -> dict:
         "cataloged_date": doc.get("publication_date"),
         "url": doc.get("html_url"),
         "subjects": topics,
-        "raw_json": {
-            "citation": doc.get("citation"),
-            "abstract": abstract[:500],
-            "action": action[:500],
-            "significant": doc.get("significant"),
-            "docket_ids": doc.get("docket_ids"),
-            "raw_text_url": doc.get("raw_text_url"),
-            "agencies": agencies,  # keep full agency list for re-attribution
-        },
+        "canonical_agency_id": identity.canonical_id,
+        "canonical_agency_name": identity.canonical_name,
+        "raw_json": raw,
     }

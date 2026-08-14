@@ -1,37 +1,74 @@
-# FedPulse — Regulatory Intelligence from Federal Metadata
+# FedPulse v0.2 — Project Instructions
 
-## What this is
-FedPulse derives proprietary regulatory signal from two free, public-domain feeds:
+## Product thesis
 
-1. **GPO MARC records** — the Catalog of U.S. Government Publications (~1.1M records).
-   - Full catalog: `usgpo/cataloging-records-all-cgp-marcxml` (28 zips × ~40k records, 357MB)
-   - Monthly delta: `usgpo/cataloging-records-CGP-maintenance-files/CGP_Records_Monthly_Files/`
-     (`New_MARC_Records`, `Changed_MARC_Records`, `Deleted_Records_Lists`, plus Online/Tangible splits)
-   - Formats: MARCXML, UTF-8 (.mrc), MARC-8
-2. **Federal Register API** (`https://www.federalregister.gov/api/v1`) — same-day rules,
-   proposed rules, notices, presidential documents. Full history 1994→now. Free, no key.
+FedPulse is an evidence-ranked federal regulatory watchlist for compliance and government-affairs teams. It answers:
 
-## The three indices
-- **API — Agency Pulse Index**: 4-week rolling z-score of publication volume per agency.
-  Spike = agency shifted into output mode.
-- **RCR — Regulatory Churn Ratio**: (Proposed Rules + Notices) / (Final Rules) over rolling
-  12-month windows per agency / SuDoc class. High ratio = drafting mode, future compliance
-  costs being baked in.
-- **TER — Topic Emergence Radar**: new or accelerating Library of Congress subject headings
-  (650 field). New heading string = new policy territory.
+> What changed, why is it noteworthy, who may be affected, and which official records support that conclusion?
 
-## Commands (all via `uv run`)
-- `PYTHONPATH=src uv run python -m fedpulse.ingest` — pull FR daily + MARC delta, upsert into SQLite
-- `PYTHONPATH=src uv run python -m fedpulse.indices` — recompute API / RCR / TER snapshots → data/outputs/
-- `PYTHONPATH=src uv run python -m fedpulse.backtest` — validate indices against known past events
-- `uv run pytest` — tests
+The product is **monitoring and prioritization, not prediction**. Coherent Federal Register packages and consequential standalone actions are the primary objects. Anomaly scores are supporting evidence only.
 
-## Stack
-Python 3.11 (uv, stdlib-only — sqlite3, xml.etree, urllib), SQLite at `data/fedpulse.db`,
-index snapshots as JSON in `data/outputs/`. No paid deps, no NLP.
+## Separate source clocks
 
-## Data provenance
-- MARC: public domain (U.S. government works). GPO repos linked from
-  https://github.com/usgpo/cataloging-records README.
-- FR API: public data, terms at https://www.federalregister.gov/developers — attribution
-  required in redistribution.
+Never mix the feeds into one time series:
+
+- **Federal Register:** daily monitoring on `publication_date` for packages, standalone actions, complete-week agency activity, and rulemaking-pipeline context.
+- **GPO MARC:** monthly/periodic topic horizon on `cataloged_date`, with explicit catalog-batch concentration and sample warnings.
+
+Every user-facing item must identify its source, cadence, date basis, freshness, confidence, selection rationale, comparison basis, and official-record evidence.
+
+## Deterministic constraints
+
+- Structured metadata and deterministic rules only.
+- No generative NLP, embeddings, semantic clustering, full-document reading, or analyst-in-the-loop requirement.
+- Agency mapping uses exact/versioned aliases and canonical IDs; preserve raw names.
+- Package formation requires exact shared topic or direction-plus-sector coherence. Same-day/same-family count alone is insufficient.
+- Package date span is at most three inclusive publication dates.
+- Two-record packages require both coherence predicates.
+- Package logical IDs are stable; immutable membership/classification versions link through supersession.
+- Direction rules use versioned phrases, word boundaries, Unicode normalization, and a three-token negation window.
+- Low-confidence packages remain dashboard-visible but never enter the daily brief.
+- Federal Register complete weeks are Monday–Friday in `America/New_York`; partial current weeks are not scored.
+- Zero-variance baselines never produce synthetic numeric z-score alerts.
+- MARC high confidence requires at least 10 records, three cataloging dates, three canonical agencies, and no date contributing more than 50%.
+
+## Lifecycle and notifications
+
+Signals are stateful: `new`, `continuing`, `resolved`, `stale`.
+
+Telegram/digest output includes only new, materially changed, resolved, stale, or critical-health conditions. Unchanged continuing conditions remain visible on the dashboard and are not repeatedly announced. A quiet successful day still reports the daily Federal Register activity ledger.
+
+## Runtime and commands
+
+- Python `>=3.11`; stdlib-only runtime dependencies.
+- Use uv for all Python execution.
+- SQLite datastore.
+- Offline tests; no production DB or network access from tests.
+- Dependency-free vanilla JavaScript dashboard served over HTTP.
+- All dynamic dashboard interpolation must pass through the single `esc()` helper or safe text-node APIs.
+
+```bash
+PYTHONPATH=src uv run python -m unittest discover -s tests -v
+PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 --db data/fedpulse.db --out data/outputs --skip-ingest --skip-marc
+PYTHONPATH=src uv run python -m fedpulse.backtest --db data/fedpulse.db --out data/outputs/backtest.md
+bash -n scripts/nightly.sh
+uv run python -m compileall -q src tests
+```
+
+## Operational safety
+
+- Development and tests must not mutate `data/fedpulse.db` or production output snapshots.
+- Nightly runs use a nonblocking overlap lock and fail loudly on Federal Register/output failures.
+- MARC failures may produce a degraded run only when visible in health output.
+- Output JSON uses schema version 2 and atomic file replacement.
+- Historical evaluation events, dates, lead requirements, and negative controls are committed before threshold tuning.
+- A predictive hit requires at least the pre-registered lead, normally 30 days; post-event topic evidence is not predictive.
+
+## Engineering workflow
+
+- Read current code and design before editing.
+- Add focused failing tests before implementation changes.
+- Keep changes atomic and avoid unrelated refactors.
+- Run narrow tests first, then full offline validation.
+- Use feature commits and preserve `Michael Colenso <michael@fedpulse.local>` as Git identity.
+- Do not claim live/production success without a fresh real pipeline run and browser verification.

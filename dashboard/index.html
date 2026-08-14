@@ -1,69 +1,32 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FedPulse — Regulatory Intelligence</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FedPulse — Evidence Watchlist v0.2</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <div class="brand">
-    <span class="logo">FP</span>
-    <div>
-      <h1>FedPulse</h1>
-      <p class="tagline">Regulatory signal from federal metadata · no NLP · public-domain feeds</p>
-    </div>
-  </div>
-  <div class="asof" id="asof">as of —</div>
-</header>
-
-<main>
-  <section class="panel" id="panel-api">
-    <div class="panel-head">
-      <h2>① Agency Pulse Index</h2>
-      <span class="sub">4-wk volume z-score · flag ≥ 2.5σ</span>
-      <span class="count" id="api-count">0</span>
-    </div>
-    <div class="filters">
-      <input id="api-filter" type="search" placeholder="filter agency…" autocomplete="off">
-    </div>
-    <div class="list" id="api-list"><div class="empty">No data yet — awaiting first ingest.</div></div>
-  </section>
-
-  <section class="panel" id="panel-rcr">
-    <div class="panel-head">
-      <h2>② Regulatory Churn Ratio</h2>
-      <span class="sub">(Proposed + Notices) / Final · 12-mo · flag ≥ 5:1</span>
-      <span class="count" id="rcr-count">0</span>
-    </div>
-    <div class="filters">
-      <input id="rcr-filter" type="search" placeholder="filter agency…" autocomplete="off">
-    </div>
-    <div class="list" id="rcr-list"><div class="empty">No data yet — awaiting first ingest.</div></div>
-  </section>
-
-  <section class="panel" id="panel-ter">
-    <div class="panel-head">
-      <h2>③ Topic Emergence Radar</h2>
-      <span class="sub">new / accelerating LC subject headings</span>
-      <span class="count" id="ter-count">0</span>
-    </div>
-    <div class="filters">
-      <input id="ter-filter" type="search" placeholder="filter subject…" autocomplete="off">
-      <div class="seg" id="ter-seg">
-        <button data-mode="new" class="active">New</button>
-        <button data-mode="accel">Accelerating</button>
-      </div>
-    </div>
-    <div class="list" id="ter-list"><div class="empty">No data yet — awaiting first ingest.</div></div>
-  </section>
-</main>
-
-<footer>
-  <span id="status">loading…</span>
-</footer>
-
-<script src="app.js"></script>
+  <header class="masthead">
+    <div class="brand"><span class="logo" aria-hidden="true">FP</span><div><h1>FedPulse</h1><p>Evidence-ranked federal action · metadata only · monitoring, not prediction</p></div></div>
+    <div id="asof" class="asof">as of —</div>
+  </header>
+  <main>
+    <section id="freshness" class="banner" aria-live="polite">Loading source freshness…</section>
+    <section class="panel totals"><div class="section-heading"><div><h2>Daily Federal Register activity</h2><p class="muted">The daily clock is separate from weekly and monthly signals.</p></div></div><div id="daily" class="daily">Awaiting schema-v2 output…</div></section>
+    <section class="panel">
+      <div class="section-heading"><div><h2>Coordinated regulatory packages</h2><p class="muted">Deterministic, bounded evidence clusters. Low confidence stays visible here but never enters the brief.</p></div><span id="package-count" class="count">0</span></div>
+      <div class="filters" role="group" aria-label="Package filters"><input id="agency-filter" placeholder="agency" autocomplete="off"><input id="direction-filter" placeholder="direction" autocomplete="off"><input id="sector-filter" placeholder="sector" autocomplete="off"><input id="family-filter" placeholder="document family" autocomplete="off"><select id="confidence-filter"><option value="">all confidence</option><option>high</option><option>medium</option><option>low</option></select><select id="lifecycle-filter"><option value="">all lifecycle</option><option>new</option><option>continuing</option><option>stale</option><option>resolved</option></select></div>
+      <div id="packages" class="cards"><div class="empty">Awaiting schema-v2 output…</div></div>
+    </section>
+    <section class="panel"><div class="section-heading"><div><h2>Standalone watchlist</h2><p class="muted">Exact taxonomy matches with record-level evidence.</p></div><span id="standalone-count" class="count">0</span></div><div id="standalone" class="cards"><div class="empty">Awaiting schema-v2 output…</div></div></section>
+    <section class="secondary">
+      <section class="panel"><div class="section-heading"><div><h2>Federal Register metrics</h2><p class="muted">Complete Mon–Fri weeks only; per-agency series.</p></div></div><div id="fr-metrics" class="cards"><div class="empty">Awaiting schema-v2 output…</div></div></section>
+      <section class="panel"><div class="section-heading"><div><h2>MARC Government Topic Horizon</h2><p class="muted">Cataloged-date clock; batch-risk and low-confidence items remain dashboard-visible.</p></div></div><div id="marc" class="cards"><div class="empty">Awaiting schema-v2 output…</div></div></section>
+    </section>
+    <section class="panel methodology"><h2>Methodology and boundaries</h2><div class="method-grid"><p><strong>Evidence first.</strong> Every package and standalone item links to official source records. FedPulse classifies metadata; it does not read or summarize full text.</p><p><strong>Separate clocks.</strong> FR daily totals, complete-week FR activity/level metrics, MARC cataloged-date horizon, and source freshness are not interchangeable.</p><p><strong>Confidence is a gate.</strong> Unknown agencies, missing URLs, concentrated MARC batches, and weak samples lower confidence. Low-confidence signals are not Telegram/brief candidates.</p><p><strong>Lifecycle.</strong> New, continuing, stale, and resolved state is persisted. Unchanged continuing signals do not notify merely because a cooldown elapsed; material changes and transitions do.</p></div></section>
+  </main>
+  <footer id="status" aria-live="polite">Loading schema-v2 snapshots…</footer>
+  <script src="app.js"></script>
 </body>
 </html>

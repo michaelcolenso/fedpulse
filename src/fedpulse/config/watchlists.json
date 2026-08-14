@@ -1,0 +1,9 @@
+{
+  "version":"watchlist-v1",
+  "watchlists":[
+    {"watchlist":"cybersecurity","agency_ids":["nist"],"topics":["Cybersecurity","Computer security"],"doc_types":["notice","rule","proposed_rule"],"phrases":["national vulnerability database","artificial intelligence","cybersecurity"]},
+    {"watchlist":"finance","agency_ids":["ncua"],"topics":["Credit unions","Banking"],"doc_types":["notice","rule","proposed_rule"],"phrases":[]},
+    {"watchlist":"public_health","agency_ids":["cdc"],"topics":["Public health"],"doc_types":["notice","rule","proposed_rule"],"phrases":[]},
+    {"watchlist":"transportation","agency_ids":["phmsa","dot"],"topics":["Hazardous materials transportation"],"doc_types":["notice","rule","proposed_rule"],"phrases":[]}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "version":"direction-v1",
+  "directions": {
+    "reduce_or_rescind":["reduce burden","reduce cost","rescinding","rescind","remove","eliminate","streamline","withdraw"],
+    "increase_or_require":["establish requirement","require","mandate","prohibit","restrict"],
+    "fund_or_award":["cooperative agreement","funding","award","grant"],
+    "consult_or_collect":["request for information","request for comment","information collection","public hearing"],
+    "authorize_or_permit":["authorize","permit","approval","exemption","waiver"],
+    "technical_or_conforming":["technical amendment","conforming amendment","correction"]
+  }
+}

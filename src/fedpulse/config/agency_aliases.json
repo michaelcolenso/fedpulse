@@ -1,0 +1,16 @@
+{
+  "version": "agency-v1",
+  "aliases": [
+    {"source":"fr","raw_name":"National Credit Union Administration","canonical_id":"ncua","canonical_name":"National Credit Union Administration","parent_id":null,"mapping_method":"fr_id"},
+    {"source":"fr","raw_name":"Pipeline and Hazardous Materials Safety Administration","canonical_id":"phmsa","canonical_name":"Pipeline and Hazardous Materials Safety Administration","parent_id":"dot","mapping_method":"fr_id"},
+    {"source":"fr","raw_name":"Centers for Disease Control and Prevention","canonical_id":"cdc","canonical_name":"Centers for Disease Control and Prevention","parent_id":"hhs","mapping_method":"fr_id"},
+    {"source":"fr","raw_name":"Centers for Disease Control and Prevention (U.S.)","canonical_id":"cdc","canonical_name":"Centers for Disease Control and Prevention","parent_id":"hhs","mapping_method":"normalized_exact"},
+    {"source":"fr","raw_name":"National Institute of Standards and Technology","canonical_id":"nist","canonical_name":"National Institute of Standards and Technology","parent_id":"commerce","mapping_method":"fr_id"},
+    {"source":"fr","raw_name":"Department of Transportation","canonical_id":"dot","canonical_name":"Department of Transportation","parent_id":null,"mapping_method":"fr_id"},
+    {"source":"marc","raw_name":"Centers for Disease Control and Prevention","canonical_id":"cdc","canonical_name":"Centers for Disease Control and Prevention","parent_id":"hhs","mapping_method":"exact_alias"},
+    {"source":"marc","raw_name":"Centers for Disease Control and Prevention (U.S.)","canonical_id":"cdc","canonical_name":"Centers for Disease Control and Prevention","parent_id":"hhs","mapping_method":"normalized_exact"},
+    {"source":"marc","raw_name":"National Credit Union Administration","canonical_id":"ncua","canonical_name":"National Credit Union Administration","parent_id":null,"mapping_method":"exact_alias"},
+    {"source":"marc","raw_name":"Pipeline and Hazardous Materials Safety Administration","canonical_id":"phmsa","canonical_name":"Pipeline and Hazardous Materials Safety Administration","parent_id":"dot","mapping_method":"exact_alias"},
+    {"source":"marc","raw_name":"National Institute of Standards and Technology","canonical_id":"nist","canonical_name":"National Institute of Standards and Technology","parent_id":"commerce","mapping_method":"exact_alias"}
+  ]
+}

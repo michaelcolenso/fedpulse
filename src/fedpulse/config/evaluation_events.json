@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "registered_at": "2026-08-14",
+  "lead_days_default": 30,
+  "events": [
+    {"name":"SEC climate disclosure — final rule","event_date":"2024-03-06","signal_class":"predictive","index":"rcr","agency":"Securities and Exchange Commission","lead_days_required":30,"negative_controls":[{"name":"post_event_rcr","date":"2024-03-07"}]},
+    {"name":"FTC non-compete — final rule","event_date":"2024-04-23","signal_class":"predictive","index":"rcr","agency":"Federal Trade Commission","lead_days_required":30,"negative_controls":[{"name":"post_event_rcr","date":"2024-04-24"}]},
+    {"name":"EPA PFAS drinking water standards — final","event_date":"2024-04-10","signal_class":"predictive","index":"rcr","agency":"Environmental Protection Agency","lead_days_required":30,"negative_controls":[{"name":"post_event_rcr","date":"2024-04-11"}]},
+    {"name":"CFPB late fees — final rule","event_date":"2024-03-05","signal_class":"predictive","index":"rcr","agency":"Consumer Financial Protection Bureau","lead_days_required":30,"negative_controls":[{"name":"post_event_rcr","date":"2024-03-06"}]},
+    {"name":"FCC net neutrality reinstatement — final","event_date":"2024-04-25","signal_class":"predictive","index":"rcr","agency":"Federal Communications Commission","lead_days_required":30,"negative_controls":[{"name":"post_event_rcr","date":"2024-04-26"}]},
+    {"name":"SEC money market fund reforms — proposal wave","event_date":"2022-02-08","signal_class":"predictive","index":"api","agency":"Securities and Exchange Commission","lead_days_required":30,"negative_controls":[{"name":"post_event_api","date":"2022-02-09"}]},
+    {"name":"FDA COVID booster era — output mode","event_date":"2021-09-01","signal_class":"predictive","index":"api","agency":"Food and Drug Administration","lead_days_required":30,"negative_controls":[{"name":"post_event_api","date":"2021-09-02"}]},
+    {"name":"EPA PFAS Action Plan — policy push","event_date":"2019-02-14","signal_class":"horizon","index":"ter","subject":"Perfluorinated chemicals--Health aspects.","lead_days_required":0,"negative_controls":[{"name":"post_event_ter","date":"2019-02-15"}]},
+    {"name":"Blockchain policy wave — congressional hearings + SEC guidance","event_date":"2018-06-01","signal_class":"horizon","index":"ter","subject":"Blockchains (Databases)","lead_days_required":0,"negative_controls":[{"name":"post_event_ter","date":"2018-06-02"}]}
+  ]
+}
