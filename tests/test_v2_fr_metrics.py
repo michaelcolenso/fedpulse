@@ -33,12 +33,14 @@ class TestFRMetrics(unittest.TestCase):
     def test_poisson_low_count_and_zero_variance_are_honest(self):
         self.assertLessEqual(poisson_upper_tail(8, 2.0), 0.01)
         with temp_db() as conn:
-            rows = [fr_record(f"z-{i}", "Fixture Agency", f"2026-07-{d:02d}", topics=["Fixture"]) for i, d in enumerate([6, 7, 8, 9, 10], 1)]
+            rows = [fr_record(f"z-{i}", "Fixture Agency", f"2026-08-{d:02d}", topics=["Fixture"]) for i, d in enumerate([3, 4, 5, 6, 7], 1)]
             seed_records(conn, rows)
             result = compute_fr_activity(conn, "2026-08-12")
             self.assertIn("baseline_raw_weekly_counts", result)
-            if result.get("statistical_evidence") == "insufficient_zero_variance":
-                self.assertNotIn("z_score", result)
+            self.assertEqual(result["statistical_evidence"],"insufficient_zero_variance")
+            self.assertNotIn("z_score", result)
+            self.assertEqual(result["items"][0]["statistical_evidence"],"insufficient_zero_variance")
+            self.assertNotIn("z_score",result["items"][0])
 
     def test_partial_week_not_scored_and_marc_is_ignored(self):
         with temp_db() as conn:
