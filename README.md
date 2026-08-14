@@ -246,8 +246,22 @@ Required repository secrets:
 
 A first run with no object yet in R2 starts from an empty database, same as a fresh local `uv sync` checkout.
 
+## Live dashboard hosting
+
+The dashboard is served by a Cloudflare Worker, **`fedpulse-dashboard`**, at:
+
+**https://fedpulse-dashboard.aged-morning-c8e4.workers.dev/**
+
+`dashboard/index.html`, `app.js`, and `style.css` are bundled directly into the Worker script (they're tiny and change rarely). The seven schema-v2 JSON outputs live in a Cloudflare KV namespace (`fedpulse-dashboard-data`, bound to the Worker as `DASHBOARD_DATA`) and are served at the same `/data/outputs/current/*.json` paths the dashboard already fetches — no changes to `app.js` were needed.
+
+The nightly workflow's **"Publish dashboard data to Cloudflare KV"** step pushes the dereferenced `data/outputs-flat/current/*.json` files to that namespace after every run, so the live dashboard always reflects the latest published snapshot. This requires one more repository secret:
+
+| Secret | Purpose |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | API token with **Workers KV Storage: Edit** permission on the account |
+
 > [!NOTE]
-> This wires up state persistence for the pipeline run only. The dashboard's own hosting (Cloudflare Pages, GitHub Pages, etc.) is a separate step — `outputs_v2.py` publishes `data/outputs/current/` via symlinks, which most static hosts don't dereference, so any future publish step needs to copy through them (`cp -rL`) first, the same way the workflow's debug-artifact upload does.
+> `outputs_v2.py` publishes `data/outputs/current/` via symlinks; the workflow's "Dereference output symlinks for upload" step (`cp -rL`) already resolves these before anything is uploaded, so the KV-publish step just reads plain files.
 
 ## Development & testing
 
