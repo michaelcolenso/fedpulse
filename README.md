@@ -231,6 +231,24 @@ Every output carries the exact taxonomy versions used, so any conclusion can be 
 - **DB-scoped lock** — concurrent pipelines against the same database fail fast instead of corrupting state.
 - **Idempotent migration** — v0.2 schema is additive; existing records are preserved, unchanged records are not rewritten nightly.
 
+## Running the nightly pipeline on GitHub Actions
+
+`.github/workflows/nightly.yml` runs `fedpulse.pipeline_v2` on a schedule using GitHub-hosted runners. Runners are ephemeral, but the pipeline's state (`signal_state`, `package_versions`, per-agency baselines, etc.) must persist across runs, so the workflow round-trips `data/fedpulse.db` through a Cloudflare R2 bucket (`fedpulse-state`) before and after each run — the pipeline itself is untouched and still talks to a local SQLite file exactly as it does today.
+
+Required repository secrets:
+
+| Secret | Purpose |
+|---|---|
+| `FEDPULSE_R2_ACCESS_KEY_ID` | R2 API token access key (S3-compatible) |
+| `FEDPULSE_R2_SECRET_ACCESS_KEY` | R2 API token secret key |
+
+`GITHUB_TOKEN` is provided automatically by Actions and is passed to the pipeline so `marc_sync.py` authenticates its `api.github.com` calls, avoiding the 60 req/hr unauthenticated rate limit on shared runner IPs.
+
+A first run with no object yet in R2 starts from an empty database, same as a fresh local `uv sync` checkout.
+
+> [!NOTE]
+> This wires up state persistence for the pipeline run only. The dashboard's own hosting (Cloudflare Pages, GitHub Pages, etc.) is a separate step — `outputs_v2.py` publishes `data/outputs/current/` via symlinks, which most static hosts don't dereference, so any future publish step needs to copy through them (`cp -rL`) first, the same way the workflow's debug-artifact upload does.
+
 ## Development & testing
 
 - **Python 3.11+**, runtime **stdlib-only** (`sqlite3`, `zoneinfo`, `statistics`, `hashlib`, `json`, `fcntl`).
