@@ -73,3 +73,20 @@ jobs:
           path: data/outputs-flat
           retention-days: 14
           if-no-files-found: warn
+
+      - name: Publish dashboard data to Cloudflare KV
+        # Feeds the fedpulse-dashboard Worker (https://fedpulse-dashboard.aged-morning-c8e4.workers.dev),
+        # which serves dashboard/ and reads these seven files straight from KV.
+        if: always()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -d data/outputs-flat/current ]; then
+            for f in daily_activity packages standalone fr_metrics marc_horizon health brief; do
+              curl -sS -f -X PUT \
+                "https://api.cloudflare.com/client/v4/accounts/4e921a01da1f55b0ddb32bb38a5524ce/storage/kv/namespaces/4df2d8d44f8d495e810fc3b888a4885b/values/${f}.json" \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data-binary "@data/outputs-flat/current/${f}.json"
+            done
+          fi
