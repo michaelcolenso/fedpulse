@@ -1,0 +1,6 @@
+{
+  "version":"sector-v1",
+  "agency_defaults":{"ncua":["credit_union"],"phmsa":["hazardous_materials"],"cdc":["healthcare"],"nist":["cybersecurity"]},
+  "topics":{"Credit unions":["credit_union"],"Hazardous materials transportation":["hazardous_materials"],"Public health":["healthcare"],"Cybersecurity":["cybersecurity"],"Computer security":["cybersecurity"],"Banking":["banking"],"Agriculture":["agriculture"],"Food manufacturing":["food_manufacturing"],"Aviation":["aviation"],"Energy":["energy"],"Government contractors":["government_contractors"]},
+  "title_keywords":{"national vulnerability database":["cybersecurity"],"artificial intelligence":["cybersecurity"],"credit union":["credit_union"],"hazardous material":["hazardous_materials"]}
+}
