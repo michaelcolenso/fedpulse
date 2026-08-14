@@ -27,15 +27,11 @@ def should_notify(previous: Mapping[str, Any] | None, current: Mapping[str, Any]
     if previous is None: return True
     if not hasattr(previous, "get"):
         previous = dict(previous)
-    old_payload = previous.get("payload_json")
-    if isinstance(old_payload, str):
-        try: old_payload = json.loads(old_payload)
-        except json.JSONDecodeError: old_payload = {}
-    old = {"signal_key":previous.get("signal_key"),"signal_type":previous.get("signal_type"),"direction":(old_payload or {}).get("direction"),"confidence":(old_payload or {}).get("confidence"),"status":previous.get("status"),"payload":old_payload or {}}
     changed = previous.get("fingerprint") != fingerprint(current)
-    last = _as_dt(previous.get("last_notified"))
-    if changed: return True
-    return last is None or now - last >= dt.timedelta(hours=cooldown_hours)
+    # Cooldown suppresses duplicate material changes; it must never turn an
+    # unchanged continuing signal into a new notification.  Transitions
+    # (including resolved/stale) change the lifecycle/status fingerprint.
+    return changed
 
 def update_signal_state(conn: sqlite3.Connection, signals: list[dict[str, Any]], now: dt.datetime) -> list[dict[str, Any]]:
     now = now if now.tzinfo else now.replace(tzinfo=dt.timezone.utc); stamp = now.isoformat().replace("+00:00", "Z")
@@ -48,16 +44,25 @@ def update_signal_state(conn: sqlite3.Connection, signals: list[dict[str, Any]],
     for key, signal in sorted(incoming.items()):
         prev = existing.get(key); fp = fingerprint(signal)
         requested = signal.get("status", "qualified")
-        lifecycle = "new" if prev is None else ("stale" if requested == "stale" else "continuing")
-        notify = should_notify(prev, {**signal, "fingerprint":fp}, now)
+        if prev is None or prev["status"] == "resolved": lifecycle = "new"
+        elif requested == "stale" and prev["status"] != "stale": lifecycle = "stale"
+        elif requested == "stale": lifecycle = "stale"
+        else: lifecycle = "continuing"
+        notify = should_notify(prev, {**signal, "status": requested, "fingerprint":fp}, now)
         last_notified = stamp if notify else (prev["last_notified"] if prev else None)
         payload = dict(signal.get("payload") or {}); payload.update({k:signal[k] for k in ("direction","confidence") if k in signal})
         conn.execute("insert or replace into signal_state(signal_key,signal_type,status,first_seen,last_seen,last_notified,fingerprint,payload_json) values (?,?,?,?,?,?,?,?)",
-                     (key, signal.get("signal_type","signal"), lifecycle, prev["first_seen"] if prev else stamp, stamp, last_notified, fp, json.dumps(payload, sort_keys=True)))
+                     (key, signal.get("signal_type","signal"), lifecycle, prev["first_seen"] if prev and prev["status"] != "resolved" else stamp, stamp, last_notified, fp, json.dumps(payload, sort_keys=True)))
         out.append({**signal,"signal_key":key,"lifecycle":lifecycle,"notify":notify})
     for key, prev in sorted(existing.items()):
         if key in incoming: continue
+        if prev["status"] == "resolved":
+            continue
         payload = json.loads(prev["payload_json"] or "{}")
-        conn.execute("update signal_state set status='resolved', last_seen=?, payload_json=? where signal_key=?", (stamp, json.dumps(payload, sort_keys=True), key))
-        out.append({"signal_key":key,"signal_type":prev["signal_type"],"lifecycle":"resolved","notify":should_notify(prev, {"signal_key":key,"signal_type":prev["signal_type"],"status":"resolved","payload":payload}, now),"payload":payload})
+        resolved = {"signal_key":key,"signal_type":prev["signal_type"],"status":"resolved","payload":payload}
+        resolved_fp = fingerprint(resolved)
+        notify = should_notify(prev, resolved, now)
+        last_notified = stamp if notify else prev["last_notified"]
+        conn.execute("update signal_state set status='resolved', last_seen=?, last_notified=?, fingerprint=?, payload_json=? where signal_key=?", (stamp, last_notified, resolved_fp, json.dumps(payload, sort_keys=True), key))
+        out.append({"signal_key":key,"signal_type":prev["signal_type"],"lifecycle":"resolved","notify":notify,"payload":payload})
     conn.commit(); return out

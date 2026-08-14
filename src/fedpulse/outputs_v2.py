@@ -41,7 +41,7 @@ def _daily(conn, as_of: str) -> dict:
     return {"date":as_of,"total_records":len(rows),"document_type_counts":counts,"agency_counts":agencies}
 
 def build_brief(payloads: Mapping[str, dict]) -> dict:
-    health=payloads.get("health",{}); packages=[p for p in payloads.get("packages",{}).get("items",[]) if p.get("confidence") in {"high","medium"} and p.get("lifecycle","new") != "resolved"]; standalone=payloads.get("standalone",{}).get("items",[]); daily=payloads.get("daily_activity",{}).get("items",[]); metrics=payloads.get("fr_metrics",{}).get("items",[]); horizon=payloads.get("marc_horizon",{}).get("items",[])
+    health=payloads.get("health",{}); packages=[p for p in payloads.get("packages",{}).get("items",[]) if p.get("confidence") in {"high","medium"} and p.get("lifecycle","new") != "resolved"]; standalone=[p for p in payloads.get("standalone",{}).get("items",[]) if p.get("lifecycle","new") != "resolved"]; daily=payloads.get("daily_activity",{}).get("items",[]); metrics=[p for p in payloads.get("fr_metrics",{}).get("items",[]) if p.get("alert") or p.get("metric") in {"weekly_activity_spike","sustained_level_shift","rulemaking_pipeline"}]; horizon=[p for p in payloads.get("marc_horizon",{}).get("items",[]) if p.get("confidence") in {"high","medium"} and p.get("lifecycle","new") != "resolved"]
     sections=[]
     warnings=[{"component":k,"status":v.get("status"),"detail":v.get("detail")} for k,v in health.get("source_freshness",{}).items() if v.get("status") not in {"fresh","running"}]
     if warnings: sections.append({"section":"health","items":warnings})
@@ -51,6 +51,41 @@ def build_brief(payloads: Mapping[str, dict]) -> dict:
     if metrics: sections.append({"section":"supporting_metrics","items":metrics})
     if horizon: sections.append({"section":"marc_horizon","items":horizon})
     return {"schema_version":2,"generated_at":payloads.get("health",{}).get("generated_at"),"generated_at_timezone":"UTC","as_of":payloads.get("health",{}).get("as_of"),"as_of_timezone":"America/New_York","source_freshness":health.get("source_freshness",{}),"items":sections}
+
+def _apply_lifecycle(conn, payloads: dict[str, dict], now: dt.datetime) -> None:
+    signals = []
+    refs = []
+    for item in payloads.get("packages", {}).get("items", []):
+        key = item.setdefault("signal_key", f"package:{item.get('package_id', item.get('label', 'unknown'))}")
+        signals.append({"signal_key":key,"signal_type":"package","status":"qualified","direction":item.get("direction"),"confidence":item.get("confidence"),"payload":item})
+        refs.append((item, key))
+    for item in payloads.get("standalone", {}).get("items", []):
+        key = item.setdefault("signal_key", f"standalone:{item.get('record_id', 'unknown')}")
+        signals.append({"signal_key":key,"signal_type":"standalone","status":"qualified","confidence":"medium","payload":item})
+        refs.append((item, key))
+    for wrapper in payloads.get("fr_metrics", {}).get("items", []):
+        if wrapper.get("metric") == "weekly_activity_spike":
+            metric_items = wrapper.get("items", [])
+        elif wrapper.get("metric") == "sustained_level_shift":
+            metric_items = wrapper.get("items", [])
+        elif wrapper.get("metric") == "rulemaking_pipeline":
+            metric_items = [x for x in wrapper.get("items", []) if x.get("newly_elevated")]
+        else:
+            metric_items = []
+        for item in metric_items:
+            if not item.get("alert") and not item.get("newly_elevated"): continue
+            key = item.setdefault("signal_key", f"metric:{wrapper.get('metric')}:{item.get('agency_id', item.get('agency', 'unknown'))}")
+            signals.append({"signal_key":key,"signal_type":"metric","status":"qualified","confidence":"medium","payload":item})
+            refs.append((item, key))
+    for item in payloads.get("marc_horizon", {}).get("items", []):
+        if item.get("confidence") not in {"high", "medium"}: continue
+        key = item.setdefault("signal_key", f"horizon:{item.get('subject', 'unknown')}")
+        signals.append({"signal_key":key,"signal_type":"horizon","status":"qualified","confidence":item.get("confidence"),"payload":item})
+        refs.append((item, key))
+    lifecycle = {x["signal_key"]: x for x in update_signal_state(conn, signals, now)}
+    for item, key in refs:
+        if key in lifecycle:
+            item.update({"lifecycle": lifecycle[key]["lifecycle"], "notify": lifecycle[key]["notify"]})
 
 def render_text_brief(brief: Mapping[str, Any]) -> str:
     lines=[f"FEDPULSE — {brief.get('as_of') or 'unknown'}"]
@@ -68,6 +103,7 @@ def build_v2_outputs(conn, as_of: str, out_dir: Path, now: dt.datetime | None = 
     packages=persist_package_versions(conn,detect_packages(conn,as_of),now.isoformat().replace("+00:00","Z"))
     standalone=detect_standalone(conn,as_of); activity=_daily(conn,as_of); fr_activity=compute_fr_activity(conn,as_of); level=compute_level_shifts(conn,as_of); pipe=compute_pipeline_metrics(conn,as_of); horizon=compute_marc_horizon(conn,as_of)
     payloads={"daily_activity":_base(as_of,now,[activity],freshness),"packages":_base(as_of,now,packages,freshness),"standalone":_base(as_of,now,standalone,freshness),"fr_metrics":_base(as_of,now,[fr_activity,level,pipe],freshness),"marc_horizon":{**horizon,"source_freshness":freshness},"health":_base(as_of,now,[{"component":k,**v} for k,v in freshness.items()],freshness)}
+    _apply_lifecycle(conn, payloads, now)
     payloads["brief"]=build_brief(payloads)
     for name,payload in payloads.items(): atomic_write_json(out_dir/f"{name}.json",payload)
     return payloads

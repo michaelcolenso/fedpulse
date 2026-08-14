@@ -30,4 +30,15 @@ class TestOps(unittest.TestCase):
             self.assertEqual(fresh["marc"]["status"],"stale")
             self.assertEqual(fresh["marc"]["detail"],"timeout")
 
+    def test_health_exposes_schema_v2_source_dates(self):
+        with temp_db() as conn:
+            from tests.v2_helpers import fr_record, marc_record, seed_records
+            seed_records(conn, [fr_record("fr-health", "Agency A", "2026-08-09"), marc_record("marc-health", "Agency A", "2026-08-08")])
+            record_success(conn, "federal_register", "2026-08-10T00:00:00Z", "ok")
+            record_success(conn, "marc", "2026-08-10T01:00:00Z", "maintenance")
+            fresh=source_freshness(conn,"2026-08-10T12:00:00Z")
+            self.assertEqual(fresh["federal_register"]["last_publication_date"], "2026-08-09")
+            self.assertEqual(fresh["marc"]["last_cataloged_date"], "2026-08-08")
+            self.assertEqual(fresh["marc"]["maintenance_applied_at"], "2026-08-10T01:00:00Z")
+
 if __name__ == "__main__": unittest.main()

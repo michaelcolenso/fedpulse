@@ -25,4 +25,17 @@ class TestPipeline(unittest.TestCase):
             code=run_pipeline(Path(td)/"db.sqlite",Path(td)/"out","2026-08-06",ingest_fr=True,sync_marc=False,fr_fetcher=lambda: (_ for _ in ()).throw(RuntimeError("offline")))
             self.assertNotEqual(code,0)
 
+    def test_default_as_of_uses_eastern_calendar_and_marc_receives_custom_db(self):
+        with tempfile.TemporaryDirectory() as td:
+            from unittest.mock import patch
+            import datetime as dt
+            custom = Path(td) / "custom.sqlite"; out = Path(td) / "out"; seen = {}
+            def sync(**kwargs): seen.update(kwargs)
+            eastern_boundary = dt.datetime(2026, 8, 7, 1, 30, tzinfo=dt.timezone.utc)
+            with patch("fedpulse.pipeline_v2.marc_sync.sync", side_effect=sync):
+                code = run_pipeline(custom, out, as_of=None, now=eastern_boundary, ingest_fr=False, sync_marc=True)
+            self.assertEqual(code, 0)
+            self.assertEqual(seen["db_path"], custom)
+            self.assertEqual(__import__("json").loads((out / "brief.json").read_text())["as_of"], "2026-08-06")
+
 if __name__ == "__main__": unittest.main()

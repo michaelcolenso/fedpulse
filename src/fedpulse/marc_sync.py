@@ -96,14 +96,16 @@ def _available_months() -> list[str]:
     return sorted(months)
 
 
-def sync() -> int:
-    RAW.mkdir(parents=True, exist_ok=True)
+def sync(db_path: Path | str | None = None, conn=None, raw_dir: Path | None = None, marker_path: Path | None = None) -> int:
+    raw_root = Path(raw_dir) if raw_dir else RAW
+    marker = Path(marker_path) if marker_path else (raw_root / ".last_synced.json")
+    raw_root.mkdir(parents=True, exist_ok=True)
     months = _available_months()
     if not months:
         print("marc_sync: no monthly files found")
         return 0
     try:
-        done = json.loads(MARKER.read_text()) if MARKER.exists() else {}
+        done = json.loads(marker.read_text()) if marker.exists() else {}
     except (json.JSONDecodeError, OSError):
         done = {}
     done_month = done.get("month")
@@ -117,8 +119,11 @@ def sync() -> int:
     print(f"marc_sync: ingesting {target[0]}..{target[-1]} ({len(target)} months)")
 
     from . import db, ingest
-    conn = db.connect(ROOT / "data" / "fedpulse.db")
-    db.init_db(conn)
+    owns_conn = conn is None
+    if conn is None:
+        from . import db
+        conn = db.connect(db_path or ROOT / "data" / "fedpulse.db")
+        db.init_db(conn)
     totals = {"new": 0, "changed": 0, "deleted": 0}
 
     for month in target:
@@ -129,7 +134,7 @@ def sync() -> int:
                 name = e.get("name", "")
                 if compact not in name:
                     continue
-                dest = RAW / kind / month / name
+                dest = raw_root / kind / month / name
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 if not dest.exists() or dest.stat().st_size != e.get("size"):
                     _download(e["download_url"], dest)
@@ -144,8 +149,9 @@ def sync() -> int:
                 else:
                     res = ingest._load_marc_dir(conn, dest.parent, kind)
                 totals[kind] += res.get("new", 0) + res.get("changed", 0) + res.get("deleted", 0)
-    conn.close()
-    MARKER.write_text(json.dumps({"month": latest, "at": dt.date.today().isoformat()}))
+    if owns_conn:
+        conn.close()
+    marker.write_text(json.dumps({"month": latest, "at": dt.date.today().isoformat()}))
     print(f"marc_sync: ingested through {latest} ({sum(totals.values())} ops)")
     return 0
 

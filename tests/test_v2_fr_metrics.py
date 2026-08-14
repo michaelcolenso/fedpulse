@@ -4,6 +4,26 @@ from tests.v2_helpers import temp_db, fr_record, seed_records
 from fedpulse.metrics_v2 import complete_publication_weeks, compute_fr_activity, compute_level_shifts, poisson_upper_tail
 
 class TestFRMetrics(unittest.TestCase):
+    def test_activity_and_level_shift_are_isolated_per_agency_with_zero_weeks(self):
+        with temp_db() as conn:
+            rows = []
+            for wi, count in enumerate([1] * 16 + [8]):
+                monday = dt.date(2026, 4, 27) + dt.timedelta(days=7 * wi)
+                for j in range(count):
+                    rows.append(fr_record(f"a-{wi}-{j}", "Agency A", (monday + dt.timedelta(days=j % 5)).isoformat()))
+            rows.append(fr_record("b-current", "Agency B", "2026-08-17"))
+            seed_records(conn, rows)
+            activity = compute_fr_activity(conn, "2026-08-24")
+            items = {item["agency"]: item for item in activity["items"]}
+            self.assertEqual(set(items), {"Agency A", "Agency B"})
+            self.assertEqual(len(items["Agency B"]["weeks"]), 17)
+            self.assertIn(0, items["Agency B"]["baseline_raw_weekly_counts"])
+            self.assertNotEqual(items["Agency A"]["current_count"], items["Agency B"]["current_count"])
+            shifts = compute_level_shifts(conn, "2026-08-24")
+            shift_items = {item["agency"]: item for item in shifts["items"]}
+            self.assertEqual(set(shift_items), {"Agency A", "Agency B"})
+            self.assertGreater(shift_items["Agency A"]["recent_total"], shift_items["Agency B"]["recent_total"])
+
     def test_complete_weeks_are_monday_friday_and_exclude_current_partial(self):
         weeks = complete_publication_weeks(dt.date(2026, 8, 12), 3)
         self.assertEqual(weeks[0], (dt.date(2026, 7, 20), dt.date(2026, 7, 24)))

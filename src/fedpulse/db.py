@@ -11,7 +11,7 @@ _BASE_COLUMNS = {
     "sudoc": "TEXT", "sudoc_stem": "TEXT", "doc_type": "TEXT",
     "publication_date": "TEXT", "cataloged_date": "TEXT", "url": "TEXT",
     "subjects": "TEXT", "raw_json": "TEXT", "canonical_agency_id": "TEXT",
-    "canonical_agency_name": "TEXT", "created_at": "TEXT",
+    "canonical_agency_name": "TEXT", "agency_mapping_version": "TEXT", "created_at": "TEXT",
     "updated_at": "TEXT",
 }
 
@@ -43,10 +43,10 @@ def upsert_record(conn: sqlite3.Connection, rec: dict) -> None:
         """INSERT INTO records
            (id, source, title, agency, agency_slug, sudoc, sudoc_stem, doc_type,
             publication_date, cataloged_date, url, subjects, raw_json,
-            canonical_agency_id, canonical_agency_name)
+            canonical_agency_id, canonical_agency_name, agency_mapping_version)
            VALUES (:id, :source, :title, :agency, :agency_slug, :sudoc, :sudoc_stem, :doc_type,
                    :publication_date, :cataloged_date, :url, :subjects, :raw_json,
-                   :canonical_agency_id, :canonical_agency_name)
+                   :canonical_agency_id, :canonical_agency_name, :agency_mapping_version)
            ON CONFLICT(id) DO UPDATE SET
              title=excluded.title, agency=excluded.agency, agency_slug=excluded.agency_slug,
              sudoc=excluded.sudoc, sudoc_stem=excluded.sudoc_stem, doc_type=excluded.doc_type,
@@ -54,6 +54,7 @@ def upsert_record(conn: sqlite3.Connection, rec: dict) -> None:
              url=excluded.url, subjects=excluded.subjects, raw_json=excluded.raw_json,
              canonical_agency_id=COALESCE(excluded.canonical_agency_id, records.canonical_agency_id),
              canonical_agency_name=COALESCE(excluded.canonical_agency_name, records.canonical_agency_name),
+             agency_mapping_version=CASE WHEN records.agency IS NOT excluded.agency OR records.raw_json IS NOT excluded.raw_json OR records.source IS NOT excluded.source THEN NULL ELSE records.agency_mapping_version END,
              updated_at=datetime('now')""",
         {
             "id": rec["id"], "source": rec["source"], "title": rec.get("title"),
@@ -65,6 +66,7 @@ def upsert_record(conn: sqlite3.Connection, rec: dict) -> None:
             "raw_json": json.dumps(rec.get("raw_json") or {}, ensure_ascii=False)[:1_000_000],
             "canonical_agency_id": rec.get("canonical_agency_id"),
             "canonical_agency_name": rec.get("canonical_agency_name"),
+            "agency_mapping_version": rec.get("agency_mapping_version"),
         },
     )
 

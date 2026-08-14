@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any, Mapping, Sequence
 
-from .taxonomy import AgencyIdentity, canonicalize_agency, classify_direction, coverage_tags, watchlist_matches
+from .taxonomy import AgencyIdentity, canonicalize_agency, classify_direction, coverage_tags, taxonomy_versions, watchlist_matches
 
 @dataclass(frozen=True)
 class EnrichedRecord:
@@ -50,9 +50,8 @@ def enrich_record(row: Mapping[str, Any]) -> EnrichedRecord:
     raw = _raw(row)
     source = str(row.get("source") or "fr")
     raw_agency = str(row.get("agency") or "")
-    identity = AgencyIdentity(source, raw_agency, row.get("canonical_agency_id"), row.get("canonical_agency_name"), None, "stored" if row.get("canonical_agency_id") else "unmapped")
-    if not identity.canonical_id:
-        identity = canonicalize_agency(source, raw_agency, raw)
+    mapped = canonicalize_agency(source, raw_agency, raw)
+    identity = AgencyIdentity(source, raw_agency, row.get("canonical_agency_id") or mapped.canonical_id, row.get("canonical_agency_name") or mapped.canonical_name, mapped.parent_id, "stored" if row.get("canonical_agency_id") else mapped.mapping_method)
     direction = classify_direction({**dict(row), **raw})
     sectors = coverage_tags({**dict(row), "subjects": _topics(row)}, identity)
     return EnrichedRecord(
@@ -133,18 +132,31 @@ def _core_key(component: Sequence[EnrichedRecord]) -> str:
         basis = "direction:" + (max(set(dirs), key=dirs.count) if dirs else "mixed_or_unknown") + ":sector:" + (sectors[0] if sectors else "unknown")
     return hashlib.sha256(("package-core-v1|" + basis).encode()).hexdigest()[:12]
 
+def _coordination(component: Sequence[EnrichedRecord]) -> dict[str, Any]:
+    ids = sorted({r.canonical_agency_id for r in component if r.canonical_agency_id})
+    parents = sorted({r.parent_id for r in component if r.parent_id})
+    if len(component) == 1 and len(ids) == 1:
+        return {"known": True, "coordination_agency_id": ids[0], "participating_agency_ids": ids}
+    if len(ids) == len(component) and len(ids) >= 2 and len(parents) == 1:
+        return {"known": True, "coordination_agency_id": parents[0], "participating_agency_ids": ids}
+    if len(ids) == 1 and all(r.canonical_agency_id == ids[0] for r in component):
+        return {"known": True, "coordination_agency_id": ids[0], "participating_agency_ids": ids}
+    return {"known": False, "coordination_agency_id": None, "participating_agency_ids": ids}
+
 def package_identity(component: Sequence[EnrichedRecord], prior_state: Mapping[str, Any] | None = None) -> dict[str, Any]:
     ordered = sorted(component, key=lambda r: (r.publication_date, r.record_id))
+    coordination = _coordination(ordered)
     if prior_state and prior_state.get("package_id"):
         package_id = prior_state["package_id"]
     else:
-        agency = ordered[0].canonical_agency_id or "unmapped"
-        package_id = f"{agency}:{ordered[0].publication_date.isoformat()}:{_core_key(ordered)}"
-    return {"package_id": package_id, "core_cluster_key": _core_key(ordered), "agency_id": ordered[0].canonical_agency_id, "earliest_publication_date": ordered[0].publication_date.isoformat()}
+        agency = coordination["coordination_agency_id"] or "unmapped"
+        participants = "+".join(coordination["participating_agency_ids"])
+        package_id = f"{agency}:{participants}:{ordered[0].publication_date.isoformat()}:{_core_key(ordered)}"
+    return {"package_id": package_id, "core_cluster_key": _core_key(ordered), "agency_id": ordered[0].canonical_agency_id, "coordination_agency_id": coordination["coordination_agency_id"], "participating_agency_ids": coordination["participating_agency_ids"], "earliest_publication_date": ordered[0].publication_date.isoformat()}
 
-def score_package(component: Sequence[EnrichedRecord], metrics: Mapping[str, Any] | None = None, watchlists: Any = None) -> dict[str, Any]:
+def score_package(component: Sequence[EnrichedRecord], metrics: Mapping[str, Any] | None = None, watchlists: Any = None, prior_state: Mapping[str, Any] | None = None) -> dict[str, Any]:
     ordered = sorted(component, key=lambda r: (r.publication_date, r.record_id))
-    identity = package_identity(ordered)
+    identity = package_identity(ordered, prior_state)
     directions = [r.direction for r in ordered if r.direction != "mixed_or_unknown"]
     dominant = max(set(directions), key=directions.count) if directions else "mixed_or_unknown"
     direction_ratio = directions.count(dominant) / len(ordered) if ordered else 0
@@ -152,7 +164,8 @@ def score_package(component: Sequence[EnrichedRecord], metrics: Mapping[str, Any
     dir_sector = any(_coherence(a, b)["direction_sector_coherent"] for i, a in enumerate(ordered) for b in ordered[i + 1:])
     coherence = topic_coherent or dir_sector
     both_two = len(ordered) != 2 or (all(_coherence(a, b)["topic_coherent"] and _coherence(a, b)["direction_sector_coherent"] for a, b in [(ordered[0], ordered[1])]))
-    known = bool(ordered[0].canonical_agency_id) and all(r.canonical_agency_id == ordered[0].canonical_agency_id for r in ordered)
+    coordination = _coordination(ordered)
+    known = coordination["known"]
     urls = all(bool(r.url) for r in ordered)
     if len(ordered) >= 3 and coherence and direction_ratio >= .6 and known and urls: confidence = "high"
     elif coherence and both_two and known and len(ordered) >= 2: confidence = "medium"
@@ -163,19 +176,36 @@ def score_package(component: Sequence[EnrichedRecord], metrics: Mapping[str, Any
     family_weight = max({"rule":3,"final_rule":3,"proposed_rule":2,"notice":1,"presidential_document":1}.get(r.doc_type, 0) for r in ordered) if ordered else 0
     components = {"record_count": min(3, max(0, len(ordered)-1)), "document_family": family_weight, "topic_cohesion": 2 if shared_topics else (1 if topic_coherent else 0), "direction_consistency": 2 if direction_ratio >= .8 else (1 if direction_ratio >= .6 else 0), "current_activity_anomaly": (metrics or {}).get("activity_anomaly", 0), "watchlist_match": min(3, sum(len(r.watchlist) for r in ordered)), "missing_evidence_penalty": -sum(1 for r in ordered if not r.url)}
     evidence = [{"record_id":r.record_id,"source":r.source,"title":r.title,"doc_type":r.doc_type,"publication_date":r.publication_date.isoformat(),"official_url":r.url,"metadata":{"topics":list(r.topics),"direction":r.direction,"matched_phrases":list(r.matched_phrases),"coverage_tags":list(r.sectors)}} for r in ordered]
-    return {**identity, "canonical_agency_name": ordered[0].canonical_agency_name, "raw_agency_names": sorted({r.raw_agency for r in ordered}), "date_start": ordered[0].publication_date.isoformat(), "date_end": ordered[-1].publication_date.isoformat(), "label": f"{ordered[0].canonical_agency_name or ordered[0].raw_agency} · {len(ordered)} actions · {dominant}", "direction": dominant, "matched_phrases": matched, "coverage_tags":[{"sector":a,"source":b,"matched_value":c} for a,b,c in coverage], "record_count":len(ordered), "document_type_counts":{t:sum(r.doc_type==t for r in ordered) for t in sorted({r.doc_type for r in ordered})}, "confidence":confidence, "confidence_reasons":["coherent exact metadata", f"direction coverage {direction_ratio:.0%}", "canonical agency known" if known else "agency unmapped", "all official URLs present" if urls else "missing official URL"], "priority_score":sum(components.values()), "priority_components":components, "evidence":evidence, "lifecycle":"new"}
+    versions = taxonomy_versions()
+    for entry in evidence:
+        entry["metadata"]["taxonomy_versions"] = versions
+    return {**identity, "canonical_agency_name": ordered[0].canonical_agency_name, "raw_agency_names": sorted({r.raw_agency for r in ordered}), "date_start": ordered[0].publication_date.isoformat(), "date_end": ordered[-1].publication_date.isoformat(), "label": f"{ordered[0].canonical_agency_name or ordered[0].raw_agency} · {len(ordered)} actions · {dominant}", "direction": dominant, "matched_phrases": matched, "coverage_tags":[{"sector":a,"source":b,"matched_value":c} for a,b,c in coverage], "record_count":len(ordered), "document_type_counts":{t:sum(r.doc_type==t for r in ordered) for t in sorted({r.doc_type for r in ordered})}, "confidence":confidence, "confidence_reasons":["coherent exact metadata", f"direction coverage {direction_ratio:.0%}", "canonical agency known" if known else "agency unmapped", "all official URLs present" if urls else "missing official URL"], "priority_score":sum(components.values()), "priority_components":components, "evidence":evidence, "taxonomy_versions":versions, "lifecycle":"new"}
 
 def detect_packages(conn: sqlite3.Connection, as_of: str, lookback_days: int = 14) -> list[dict[str, Any]]:
     end = date.fromisoformat(as_of); start = end - timedelta(days=lookback_days)
     rows = conn.execute("select * from records where source='fr' and publication_date between ? and ? order by publication_date,id", (start.isoformat(), end.isoformat())).fetchall()
     records = [enrich_record(r) for r in rows]
-    return [score_package(c) for c in bounded_components(records, candidate_edges(records))]
+    def prior_for(component):
+        ids = {r.record_id for r in component}; agency_ids = {r.canonical_agency_id for r in component if r.canonical_agency_id}; start = min(r.publication_date for r in component); end_date = max(r.publication_date for r in component)
+        candidates = conn.execute("select * from package_versions order by created_at desc").fetchall()
+        for prior in candidates:
+            members = {x["record_id"] for x in conn.execute("select record_id from package_version_records where package_version_id=?", (prior["package_version_id"],))}
+            if not members:
+                try: members = {x["record_id"] for x in json.loads(prior["payload_json"]).get("evidence", [])}
+                except (TypeError, json.JSONDecodeError): members = set()
+            if ids & members:
+                return json.loads(prior["payload_json"])
+            payload = json.loads(prior["payload_json"])
+            if payload.get("coordination_agency_id") in agency_ids and payload.get("date_start") and abs((start - date.fromisoformat(payload["date_start"])).days) <= lookback_days:
+                return payload
+        return None
+    return [score_package(c, prior_state=prior_for(c)) for c in bounded_components(records, candidate_edges(records))]
 
 def persist_package_versions(conn: sqlite3.Connection, packages: list[dict[str, Any]], now: str) -> list[dict[str, Any]]:
     out = []
     for package in sorted(packages, key=lambda p: p["package_id"]):
         member_ids = sorted(e["record_id"] for e in package.get("evidence", []))
-        canonical = json.dumps({"package_id":package["package_id"],"records":member_ids,"direction":package["direction"],"confidence":package["confidence"],"versions":["direction-v1","sector-v1","agency-v1"]}, sort_keys=True, separators=(",", ":"))
+        canonical = json.dumps({"package_id":package["package_id"],"records":member_ids,"direction":package["direction"],"confidence":package["confidence"],"taxonomy_versions":package.get("taxonomy_versions", taxonomy_versions())}, sort_keys=True, separators=(",", ":"))
         version_id = hashlib.sha256(canonical.encode()).hexdigest()[:16]
         prior = conn.execute("select * from package_versions where package_id=? order by created_at desc limit 1", (package["package_id"],)).fetchone()
         supersedes = prior["package_version_id"] if prior and prior["package_version_id"] != version_id else None

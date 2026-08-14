@@ -18,8 +18,9 @@ def normalize_record_agency(conn: sqlite3.Connection, record_id: str) -> AgencyI
     row = conn.execute("select * from records where id = ?", (record_id,)).fetchone()
     if row is None: raise KeyError(record_id)
     identity = canonicalize_agency(row["source"], row["agency"] or "", _raw(row))
-    conn.execute("update records set canonical_agency_id=?, canonical_agency_name=? where id=?",
-                 (identity.canonical_id, identity.canonical_name, record_id))
+    from .taxonomy import AGENCY_CONFIG
+    conn.execute("update records set canonical_agency_id=?, canonical_agency_name=?, agency_mapping_version=? where id=?",
+                 (identity.canonical_id, identity.canonical_name, AGENCY_CONFIG["version"], record_id))
     if identity.canonical_id:
         conn.execute("""insert into agency_aliases(source, raw_name, canonical_id, canonical_name, parent_id, mapping_method)
                        values (?, ?, ?, ?, ?, ?) on conflict(source, raw_name) do update set
@@ -30,12 +31,15 @@ def normalize_record_agency(conn: sqlite3.Connection, record_id: str) -> AgencyI
     return identity
 
 def normalize_all(conn: sqlite3.Connection, batch_size: int = 5000) -> dict[str, int]:
-    rows = conn.execute("select id from records order by id").fetchall()
-    mapped = unmapped = 0
+    from .taxonomy import AGENCY_CONFIG
+    version = AGENCY_CONFIG["version"]
+    rows = conn.execute("select id from records where agency_mapping_version is null or agency_mapping_version != ? order by id", (version,)).fetchall()
+    processed = 0
     for offset in range(0, len(rows), max(1, batch_size)):
         for row in rows[offset:offset + max(1, batch_size)]:
-            identity = normalize_record_agency(conn, row["id"])
-            if identity.canonical_id: mapped += 1
-            else: unmapped += 1
+            normalize_record_agency(conn, row["id"])
+            processed += 1
         conn.commit()
-    return {"mapped": mapped, "unmapped": unmapped}
+    mapped = conn.execute("select count(*) from records where canonical_agency_id is not null").fetchone()[0]
+    unmapped = conn.execute("select count(*) from records where canonical_agency_id is null").fetchone()[0]
+    return {"mapped": mapped, "unmapped": unmapped, "processed": processed, "mapping_version": version}

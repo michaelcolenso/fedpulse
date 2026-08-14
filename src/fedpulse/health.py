@@ -34,5 +34,22 @@ def source_freshness(conn: sqlite3.Connection, now: str | dt.datetime) -> dict[s
                 status="stale" if age > 48*3600 else ("failed" if status == "failed" else "degraded")
             else:
                 status="failed" if status == "failed" else "degraded"
-        out[row["component"]]={"last_attempt":row["last_attempt"],"last_success":success,"status":status,"detail":row["detail"]}
+        component = row["component"]
+        fields = {"last_attempt":row["last_attempt"],"last_success":success,"status":status,"detail":row["detail"]}
+        if component == "federal_register":
+            fields["last_publication_date"] = conn.execute("select max(publication_date) from records where source='fr' and publication_date is not null").fetchone()[0]
+        if component == "marc":
+            fields["last_cataloged_date"] = conn.execute("select max(cataloged_date) from records where source='marc' and cataloged_date is not null").fetchone()[0]
+            fields["maintenance_applied_at"] = success
+        out[component]=fields
+    for component in ("federal_register", "marc"):
+        if component in out:
+            continue
+        fields = {"last_attempt":None,"last_success":None,"status":"degraded","detail":"no ingest attempt recorded"}
+        if component == "federal_register":
+            fields["last_publication_date"] = conn.execute("select max(publication_date) from records where source='fr' and publication_date is not null").fetchone()[0]
+        else:
+            fields["last_cataloged_date"] = conn.execute("select max(cataloged_date) from records where source='marc' and cataloged_date is not null").fetchone()[0]
+            fields["maintenance_applied_at"] = None
+        out[component] = fields
     return out

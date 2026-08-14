@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS records (
     title TEXT, agency TEXT, agency_slug TEXT, sudoc TEXT, sudoc_stem TEXT,
     doc_type TEXT, publication_date TEXT, cataloged_date TEXT, url TEXT,
     subjects TEXT, raw_json TEXT,
-    canonical_agency_id TEXT, canonical_agency_name TEXT,
+    canonical_agency_id TEXT, canonical_agency_name TEXT, agency_mapping_version TEXT,
     created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_records_agency_date ON records(agency, publication_date);

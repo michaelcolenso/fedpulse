@@ -58,4 +58,34 @@ class TestPackages(unittest.TestCase):
         result = score_package([replace(good[0], url=None), *good[1:]])
         self.assertNotEqual(result["confidence"], "high")
 
+    def test_parent_coordination_is_explicit_and_taxonomy_versions_are_in_evidence(self):
+        rows = self._enriched("cdc_funding_package")
+        result = score_package(rows)
+        self.assertIn(result["confidence"], {"high", "medium"})
+        self.assertEqual(result["coordination_agency_id"], "cdc")
+        self.assertTrue(result["taxonomy_versions"])
+        self.assertTrue(all(e["metadata"]["taxonomy_versions"] == result["taxonomy_versions"] for e in result["evidence"]))
+
+    def test_known_parent_allows_coherent_sibling_children_but_not_unrelated_parent(self):
+        rows = self._enriched("cdc_funding_package")
+        sibling = replace(rows[1], canonical_agency_id="fictional-child", canonical_agency_name="Fictional Child", parent_id="hhs")
+        result = score_package([rows[0], sibling])
+        self.assertIn(result["confidence"], {"high", "medium"})
+        self.assertEqual(result["coordination_agency_id"], "hhs")
+        unrelated = replace(rows[1], canonical_agency_id="fictional-child", canonical_agency_name="Fictional Child", parent_id="other-parent")
+        self.assertEqual(bounded_components([rows[0], unrelated], candidate_edges([rows[0], unrelated])), [])
+
+    def test_detect_reconciles_added_member_against_persisted_package(self):
+        with temp_db() as conn:
+            original = load_case("ncua_package")
+            seed_records(conn, original); normalize_all(conn)
+            first = detect_packages(conn, "2026-08-06")
+            persisted = persist_package_versions(conn, first, "2026-08-07T00:00:00Z")
+            extra = dict(original[0]); extra["id"] = "fr:ncua-added"; extra["title"] = "Additional credit union action"
+            seed_records(conn, [extra]); normalize_all(conn)
+            second = detect_packages(conn, "2026-08-06")
+            self.assertEqual(second[0]["package_id"], persisted[0]["package_id"])
+            newer = persist_package_versions(conn, second, "2026-08-08T00:00:00Z")
+            self.assertEqual(newer[0]["supersedes_version_id"], persisted[0]["package_version_id"])
+
 if __name__ == "__main__": unittest.main()

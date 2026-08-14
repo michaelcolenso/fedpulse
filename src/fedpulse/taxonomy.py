@@ -18,6 +18,14 @@ DIRECTION_CONFIG = _load("direction_phrases.json")
 SECTOR_CONFIG = _load("sector_map.json")
 WATCHLIST_CONFIG = _load("watchlists.json")
 
+def taxonomy_versions() -> dict[str, str]:
+    return {
+        "agency_alias_version": AGENCY_CONFIG["version"],
+        "direction_dictionary_version": DIRECTION_CONFIG["version"],
+        "sector_map_version": SECTOR_CONFIG["version"],
+        "watchlist_version": WATCHLIST_CONFIG["version"],
+    }
+
 @dataclass(frozen=True)
 class AgencyIdentity:
     source: str
