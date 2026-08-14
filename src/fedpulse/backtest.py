@@ -12,7 +12,8 @@ import json
 import statistics
 from pathlib import Path
 
-from . import db, indices
+from . import db
+from .metrics_v2 import compute_fr_activity, compute_pipeline_metrics
 
 CONFIG = Path(__file__).parent / "config" / "evaluation_events.json"
 EVENTS = json.loads(CONFIG.read_text(encoding="utf-8"))["events"]
@@ -31,15 +32,15 @@ def _check_rcr(conn, event: dict, *, as_of: dt.date | None = None) -> dict:
     candidates = []
     day = start
     while day <= cutoff:
-        result = indices.compute_rcr(conn, as_of=day.isoformat())
-        row = next((a for a in result["agencies"] if a["agency"] == event.get("agency")), None)
-        if row and row.get("flagged"):
+        result = compute_pipeline_metrics(conn, as_of=day.isoformat())
+        row = next((a for a in result["items"] if a["agency"] == event.get("agency")), None)
+        if row and row.get("newly_elevated"):
             candidates.append((day, row))
         day += dt.timedelta(days=7)
     if not candidates:
         return {"fired": False, "lead_days": None, "evidence_date": None, "detail": f"no RCR flag for {event.get('agency')} at least {event.get('lead_days_required',30)} days before event"}
     fire_day, row = candidates[-1]
-    return {"fired": True, "lead_days": (event_day - fire_day).days, "evidence_date": fire_day.isoformat(), "detail": f"RCR flag {fire_day}: ratio={row['churn_ratio']} finals={row['final_rules']} props={row['proposed_rules']} notices={row['notices']}"}
+    return {"fired": True, "lead_days": (event_day - fire_day).days, "evidence_date": fire_day.isoformat(), "detail": f"pipeline flag {fire_day}: proposal/final={row['proposal_to_final_ratio']} finals={row['final_rules']} proposals={row['proposed_rules']}"}
 
 
 def _check_api(conn, event: dict) -> dict:
@@ -47,9 +48,9 @@ def _check_api(conn, event: dict) -> dict:
     candidates = []
     day = start
     while day <= cutoff:
-        result = indices.compute_api(conn, as_of=day.isoformat())
-        row = next((a for a in result["agencies"] if a["agency"] == event.get("agency")), None)
-        if row and row.get("flagged"):
+        result = compute_fr_activity(conn, as_of=day.isoformat())
+        row = next((a for a in result["items"] if a["agency"] == event.get("agency") or a.get("agency_id") == event.get("agency")), None)
+        if row and row.get("alert"):
             candidates.append((day, row))
         day += dt.timedelta(days=7)
     if not candidates:
@@ -61,7 +62,7 @@ def _check_api(conn, event: dict) -> dict:
 def _check_ter(conn, event: dict, *, predictive: bool = False) -> dict:
     event_day = _date(event); lead = int(event.get("lead_days_required", 30)) if predictive else 0; cutoff = event_day - dt.timedelta(days=lead)
     needle = str(event.get("subject", "")).casefold()
-    row = conn.execute("select subject, first_seen_date, first_agency from subject_first_seen where lower(subject)=? order by first_seen_date limit 1", (needle,)).fetchone()
+    row = conn.execute("select s.subject, s.first_seen_date, s.first_agency from subject_first_seen s join records r on r.id=s.first_record_id and r.source='marc' where lower(s.subject)=? order by s.first_seen_date limit 1", (needle,)).fetchone()
     if not row:
         return {"fired": False, "lead_days": None, "evidence_date": None, "detail": f"subject '{event.get('subject')}' not found"}
     first = dt.date.fromisoformat(row["first_seen_date"])
@@ -96,10 +97,15 @@ def evaluate_events(conn, events: list[dict] | None = None) -> dict:
     results = [check(conn, event) for event in events]
     predictive = [r for r in results if r["signal_class"] == "predictive"]
     horizon = [r for r in results if r["signal_class"] == "horizon"]
-    controls = [_negative_control(conn, event, control) for event in events for control in event.get("negative_controls", [])]
-    tp = sum(r["fired"] for r in predictive); fn = len(predictive) - tp; fp = sum(c["fired"] for c in controls); tn = len(controls) - fp
+    predictive_controls = []
+    horizon_controls = []
+    for event in events:
+        controls = event.get("negative_controls") or []
+        target = horizon_controls if event.get("signal_class") == "horizon" else predictive_controls
+        target.extend(_negative_control(conn,event,control) for control in controls)
+    tp = sum(r["fired"] for r in predictive); fn = len(predictive) - tp; fp = sum(c["fired"] for c in predictive_controls); tn = len(predictive_controls) - fp
     leads = [r["lead_days"] for r in predictive if r["fired"] and r["lead_days"] is not None]
-    return {"predictive":{"events":predictive,"true_positives":tp,"false_negatives":fn,"precision":tp/(tp+fp) if tp+fp else 0.0,"recall":tp/(tp+fn) if tp+fn else 0.0,"false_positive_rate":fp/(fp+tn) if fp+tn else 0.0,"median_lead_days":statistics.median(leads) if leads else None},"horizon":{"events":horizon,"note":"Horizon emergence is descriptive and excluded from predictive precision/recall."},"negative_controls":controls}
+    return {"predictive":{"events":predictive,"true_positives":tp,"false_negatives":fn,"precision":tp/(tp+fp) if tp+fp else 0.0,"recall":tp/(tp+fn) if tp+fn else 0.0,"false_positive_rate":fp/(fp+tn) if fp+tn else 0.0,"median_lead_days":statistics.median(leads) if leads else None,"negative_controls":predictive_controls},"horizon":{"events":horizon,"negative_controls":horizon_controls,"note":"Horizon emergence is descriptive and excluded from predictive precision/recall."},"negative_controls":predictive_controls}
 
 
 def render_report(report: dict) -> str:

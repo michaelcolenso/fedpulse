@@ -10,7 +10,7 @@ GPO pushes monthly files to:
 
 Design: list remote dir, take the newest month across all sets, skip if already
 ingested (marker file), download, ingest. Network-dependent — called from
-nightly.sh with `|| true` so a blocked network never breaks the FR leg.
+the v2 pipeline, which records source failures explicitly while preserving the FR leg.
 """
 from __future__ import annotations
 
@@ -18,9 +18,11 @@ import csv
 import datetime as dt
 import io
 import json
+import os
 import re
 import shutil
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 import zipfile
@@ -49,8 +51,28 @@ def _get_json(url: str) -> list[dict]:
 
 def _download(url: str, dest: Path) -> None:
     req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=120) as resp, open(dest, "wb") as fh:
-        shutil.copyfileobj(resp, fh)
+    fd, temporary = tempfile.mkstemp(prefix=f".{dest.name}.",suffix=".part",dir=dest.parent)
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp, os.fdopen(fd, "wb") as fh:
+            shutil.copyfileobj(resp, fh); fh.flush(); os.fsync(fh.fileno())
+        os.replace(temporary,dest)
+    except Exception:
+        try: os.close(fd)
+        except OSError: pass
+        try: os.unlink(temporary)
+        except OSError: pass
+        raise
+
+
+def _safe_extract(archive: zipfile.ZipFile, destination: Path, *, max_files: int = 10_000, max_uncompressed_bytes: int = 2_000_000_000) -> None:
+    destination=destination.resolve(); members=archive.infolist()
+    if len(members) > max_files: raise ValueError(f"archive has too many members: {len(members)}")
+    if sum(member.file_size for member in members) > max_uncompressed_bytes: raise ValueError("archive exceeds uncompressed size limit")
+    for member in members:
+        target=(destination/member.filename).resolve()
+        if not target.is_relative_to(destination): raise ValueError(f"unsafe archive path: {member.filename}")
+        if ((member.external_attr >> 16) & 0o170000) == 0o120000: raise ValueError(f"archive symlink rejected: {member.filename}")
+    archive.extractall(destination)
 
 
 def _delete_from_csv(conn, path: Path) -> dict:
@@ -106,10 +128,10 @@ def sync(db_path: Path | str | None = None, conn=None, raw_dir: Path | None = No
     if not months:
         print("marc_sync: no monthly files found")
         return 0
-    try:
-        done = json.loads(marker.read_text()) if marker.exists() else {}
-    except (json.JSONDecodeError, OSError):
-        done = {}
+    if marker.exists():
+        try: done = json.loads(marker.read_text())
+        except (json.JSONDecodeError, OSError) as exc: raise ValueError(f"invalid MARC sync marker {marker}: {exc}") from exc
+    else: done = {}
     done_month = done.get("month")
     latest = months[-1]
     if done_month == latest:
@@ -147,13 +169,15 @@ def sync(db_path: Path | str | None = None, conn=None, raw_dir: Path | None = No
                     if zipfile.is_zipfile(dest):
                         extract_dir = dest.with_suffix("")
                         with zipfile.ZipFile(dest) as z:
-                            z.extractall(extract_dir)
+                            _safe_extract(z,extract_dir)
                         res = ingest._load_marc_dir(conn, extract_dir, kind)
                     else:
                         res = ingest._load_marc_dir(conn, dest.parent, kind)
                     totals[kind] += res.get("new", 0) + res.get("changed", 0) + res.get("deleted", 0)
         conn.commit()
-        marker.write_text(json.dumps({"month": latest, "at": dt.date.today().isoformat()}))
+        marker_tmp=marker.with_name(f".{marker.name}.tmp")
+        marker_tmp.write_text(json.dumps({"month": latest, "at": dt.date.today().isoformat()}))
+        os.replace(marker_tmp,marker)
     except Exception:
         conn.rollback()
         if owns_conn:

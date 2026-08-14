@@ -37,11 +37,16 @@ def source_freshness(conn: sqlite3.Connection, now: str | dt.datetime) -> dict[s
         component = row["component"]
         fields = {"last_attempt":row["last_attempt"],"last_success":success,"status":status,"detail":row["detail"]}
         if component == "federal_register":
-            fields["last_publication_date"] = conn.execute("select max(publication_date) from records where source='fr' and publication_date is not null").fetchone()[0]
+            last_publication = conn.execute("select max(publication_date) from records where source='fr' and publication_date is not null").fetchone()[0]
+            fields["last_publication_date"] = last_publication
             fields["fetched_at"] = success
+            if status == "fresh" and last_publication is None: fields["status"] = "degraded"; fields["detail"] = "fetch succeeded but no Federal Register records are present"
+            elif status == "fresh" and (current.date() - dt.date.fromisoformat(last_publication)).days > 4: fields["status"] = "stale"; fields["detail"] = "Federal Register publication data is older than four days"
         if component == "marc":
-            fields["last_cataloged_date"] = conn.execute("select max(cataloged_date) from records where source='marc' and cataloged_date is not null").fetchone()[0]
+            last_cataloged = conn.execute("select max(cataloged_date) from records where source='marc' and cataloged_date is not null").fetchone()[0]
+            fields["last_cataloged_date"] = last_cataloged
             fields["maintenance_applied_at"] = success
+            if status == "fresh" and last_cataloged is None: fields["status"] = "degraded"; fields["detail"] = "maintenance check succeeded but no MARC records are present"
         out[component]=fields
     for component in ("federal_register", "marc"):
         if component in out:

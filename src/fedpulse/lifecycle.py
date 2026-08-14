@@ -68,7 +68,7 @@ def should_notify(previous: Mapping[str, Any] | None, current: Mapping[str, Any]
     if old.get("_pending_material_change"): return True
     return _material_change(str(current.get("signal_type") or previous.get("signal_type") or ""), old, new)
 
-def update_signal_state(conn: sqlite3.Connection, signals: list[dict[str, Any]], now: dt.datetime) -> list[dict[str, Any]]:
+def update_signal_state(conn: sqlite3.Connection, signals: list[dict[str, Any]], now: dt.datetime, *, commit: bool = True) -> list[dict[str, Any]]:
     now = now if now.tzinfo else now.replace(tzinfo=dt.timezone.utc); stamp = now.isoformat().replace("+00:00", "Z")
     incoming = {}
     for signal in signals:
@@ -105,4 +105,5 @@ def update_signal_state(conn: sqlite3.Connection, signals: list[dict[str, Any]],
         last_notified = stamp if notify else prev["last_notified"]
         conn.execute("update signal_state set status='resolved', last_seen=?, last_notified=?, fingerprint=?, payload_json=? where signal_key=?", (stamp, last_notified, resolved_fp, json.dumps(payload, sort_keys=True), key))
         out.append({"signal_key":key,"signal_type":prev["signal_type"],"lifecycle":"resolved","notify":notify,"payload":payload})
-    conn.commit(); return out
+    if commit: conn.commit()
+    return out

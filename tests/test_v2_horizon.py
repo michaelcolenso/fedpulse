@@ -26,4 +26,13 @@ class TestHorizon(unittest.TestCase):
             seed_records(conn, [{"id":"fr:x","source":"fr","title":"x","agency":"A","doc_type":"notice","publication_date":"2026-07-01","cataloged_date":"2026-07-01","url":"https://www.federalregister.gov/d/x","subjects":["Emerging heading"],"raw_json":{}}])
             self.assertEqual(compute_marc_horizon(conn, "2026-07-10")["items"], [])
 
+    def test_persistent_nonaccelerating_subject_is_not_emergence(self):
+        with temp_db() as conn:
+            rows=[]
+            for i, day in enumerate(("2026-05-01","2026-05-08","2026-07-01")):
+                rows.append({"id":f"marc:p-{i}","source":"marc","title":"Persistent","agency":"National Institute of Standards and Technology","doc_type":"","publication_date":None,"cataloged_date":day,"url":f"https://catalog.gpo.gov/F/p-{i}","subjects":["Persistent heading"],"raw_json":{}})
+            seed_records(conn,rows)
+            conn.execute("insert into subject_first_seen values (?,?,?,?)",("Persistent heading","2026-05-01","marc:p-0","National Institute of Standards and Technology")); conn.commit()
+            self.assertFalse(any(x["subject"] == "Persistent heading" for x in compute_marc_horizon(conn,"2026-07-10")["items"]))
+
 if __name__ == "__main__": unittest.main()

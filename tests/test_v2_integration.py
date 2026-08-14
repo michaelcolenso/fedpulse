@@ -25,6 +25,7 @@ class TestV2Integration(unittest.TestCase):
             self.assertTrue(all((__import__("datetime").date.fromisoformat(p["date_end"]) - __import__("datetime").date.fromisoformat(p["date_start"])).days <= 2 for p in first["packages"]["items"]))
             self.assertFalse(any("unrelated" in p["package_id"] for p in first["packages"]["items"]))
             self.assertTrue(first["standalone"]["items"])
+            self.assertEqual([x["record_id"] for x in first["standalone"]["items"]],["fr:nist-001"])
             self.assertTrue(first["packages"]["items"][0]["evidence"][0]["official_url"].startswith("https://"))
             self.assertEqual(first["packages"]["items"][0]["package_id"], second["packages"]["items"][0]["package_id"])
             self.assertEqual(first["packages"]["items"][0]["package_version_id"], second["packages"]["items"][0]["package_version_id"])

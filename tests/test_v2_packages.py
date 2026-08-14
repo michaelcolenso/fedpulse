@@ -49,6 +49,22 @@ class TestPackages(unittest.TestCase):
             self.assertNotEqual(first["package_version_id"], newer["package_version_id"])
             self.assertEqual(newer["supersedes_version_id"], first["package_version_id"])
 
+    def test_new_package_id_uses_coordination_date_and_core_only(self):
+        rows=self._enriched("ncua_package")
+        identity=package_identity(rows)
+        self.assertEqual(identity["package_id"],f"{identity['coordination_agency_id']}:{identity['earliest_publication_date']}:{identity['core_cluster_key']}")
+
+    def test_evidence_change_creates_new_immutable_version(self):
+        rows=self._enriched("ncua_package")
+        with temp_db() as conn:
+            seed_records(conn,load_case("ncua_package")); normalize_all(conn)
+            first_package=score_package(rows)
+            first=persist_package_versions(conn,[first_package],"2026-08-07T00:00:00Z")[0]
+            revised=score_package([replace(rows[0],title="REVISED TITLE"),*rows[1:]],prior_state=first_package)
+            second=persist_package_versions(conn,[revised],"2026-08-08T00:00:00Z")[0]
+            self.assertNotEqual(first["package_version_id"],second["package_version_id"])
+            self.assertEqual(second["supersedes_version_id"],first["package_version_id"])
+
     def test_count_alone_is_not_high_and_missing_url_downgrades(self):
         rows = self._enriched("unrelated_same_day_notices")
         forced = [replace(r, topics=("Shared",), direction="mixed_or_unknown", sectors=()) for r in rows]

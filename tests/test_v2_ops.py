@@ -1,14 +1,43 @@
 import csv
+import io
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 from tests.v2_helpers import temp_db
 from fedpulse import db
 from fedpulse.health import record_attempt, record_failure, record_success, source_freshness
-from fedpulse.marc_sync import _delete_from_csv, sync
+from fedpulse.marc_sync import _delete_from_csv, _download, _safe_extract, sync
 
 class TestOps(unittest.TestCase):
+    def test_corrupt_marker_fails_loudly(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td); marker=root/"marker.json"; marker.write_text("{broken")
+            with patch("fedpulse.marc_sync._available_months",return_value=["2026-08"]), self.assertRaisesRegex(ValueError,"invalid MARC sync marker"):
+                sync(db_path=root/"db.sqlite",raw_dir=root/"raw",marker_path=marker)
+
+    def test_failed_download_preserves_existing_destination(self):
+        class BrokenResponse:
+            def __enter__(self): return self
+            def __exit__(self,*_args): return False
+            def read(self,_size=-1): raise OSError("connection reset")
+        with tempfile.TemporaryDirectory() as td:
+            dest=Path(td)/"monthly.zip"; dest.write_bytes(b"known-good")
+            with patch("fedpulse.marc_sync.urllib.request.urlopen",return_value=BrokenResponse()), self.assertRaises(OSError):
+                _download("https://example.invalid/monthly.zip",dest)
+            self.assertEqual(dest.read_bytes(),b"known-good")
+            self.assertFalse(any(path.suffix == ".part" for path in Path(td).iterdir()))
+
+    def test_zip_extraction_rejects_traversal_and_size_overflow(self):
+        with tempfile.TemporaryDirectory() as td:
+            for name,limit in (("../escape.mrc",100),("safe.mrc",2)):
+                data=io.BytesIO()
+                with zipfile.ZipFile(data,"w") as archive: archive.writestr(name,b"123")
+                data.seek(0)
+                with zipfile.ZipFile(data) as archive, self.assertRaises(ValueError):
+                    _safe_extract(archive,Path(td)/"out",max_uncompressed_bytes=limit)
+
     def test_deleted_csv_header_variants_and_skips(self):
         for header in ("Sys. No.", "System Number", "System Number "):
             with tempfile.TemporaryDirectory() as td, temp_db() as conn:
@@ -60,7 +89,8 @@ class TestOps(unittest.TestCase):
             record_attempt(conn,"marc","2026-08-01T00:00:00Z")
             record_failure(conn,"marc","2026-08-01T00:01:00Z","timeout")
             fresh=source_freshness(conn,"2026-08-10T12:00:00Z")
-            self.assertEqual(fresh["federal_register"]["status"],"fresh")
+            self.assertEqual(fresh["federal_register"]["status"],"degraded")
+            self.assertIn("no Federal Register records",fresh["federal_register"]["detail"])
             self.assertEqual(fresh["marc"]["status"],"stale")
             self.assertEqual(fresh["marc"]["detail"],"timeout")
 
@@ -71,6 +101,7 @@ class TestOps(unittest.TestCase):
             record_success(conn, "federal_register", "2026-08-10T00:00:00Z", "ok")
             record_success(conn, "marc", "2026-08-10T01:00:00Z", "maintenance")
             fresh=source_freshness(conn,"2026-08-10T12:00:00Z")
+            self.assertEqual(fresh["federal_register"]["status"], "fresh")
             self.assertEqual(fresh["federal_register"]["last_publication_date"], "2026-08-09")
             self.assertEqual(fresh["federal_register"]["fetched_at"], "2026-08-10T00:00:00Z")
             self.assertEqual(fresh["marc"]["last_cataloged_date"], "2026-08-08")

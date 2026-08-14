@@ -123,24 +123,25 @@ def _eligible(counts: dict[str, int]) -> bool:
 def compute_pipeline_metrics(conn: sqlite3.Connection, as_of: str) -> dict:
     """Compute separate proposal/final and notices workload ratios with sample/history gates."""
     end = date.fromisoformat(as_of); query_start = _month_shift(end.replace(day=1), -25)
-    rows = conn.execute("select canonical_agency_id, agency, doc_type, publication_date from records where source='fr' and publication_date between ? and ?", (query_start.isoformat(), end.isoformat())).fetchall()
+    rows = conn.execute("select canonical_agency_id, canonical_agency_name, agency, doc_type, publication_date from records where source='fr' and publication_date between ? and ?", (query_start.isoformat(), end.isoformat())).fetchall()
     agencies = sorted({r["canonical_agency_id"] or r["agency"] or "unmapped" for r in rows})
     current_values = []; items = []
     for agency in agencies:
         current_start = _month_shift(end.replace(day=1), -11)
         agency_rows = [r for r in rows if (r["canonical_agency_id"] or r["agency"] or "unmapped") == agency]
+        agency_name = next((r["canonical_agency_name"] or r["agency"] for r in agency_rows if r["canonical_agency_name"] or r["agency"]), agency)
         current = _window_counts(agency_rows, current_start, end)
         current_ratio = _ratio(current); eligible = _eligible(current)
         histories = []
         for shift in range(1, 14):
-            window_end = _month_shift(end.replace(day=1), -shift) - timedelta(days=1)
+            window_end = _month_shift(end.replace(day=1), -(shift - 1)) - timedelta(days=1)
             window_start = _month_shift(window_end.replace(day=1), -11)
             c = _window_counts(agency_rows, window_start, window_end)
             if _eligible(c) and _ratio(c) is not None: histories.append(_ratio(c))
-        prior_end = _month_shift(end.replace(day=1), -1) - timedelta(days=1)
+        prior_end = end.replace(day=1) - timedelta(days=1)
         prior_start = _month_shift(prior_end.replace(day=1), -11)
         prior_ratio = _ratio(_window_counts(agency_rows, prior_start, prior_end))
-        item = {"agency":agency, **current, "eligible":eligible, "proposal_to_final_ratio":current_ratio, "activity_to_final_ratio":(current["proposed_rules"] + current["notices"]) / current["final_rules"] if current["final_rules"] else None, "workload_metric":"activity_to_final_ratio", "history_sample_size":len(histories), "history_mean":statistics.fmean(histories) if histories else None, "history_standard_deviation":statistics.pstdev(histories) if len(histories)>1 else None, "prior_month_ratio":prior_ratio, "history_z_score":None, "current_percentile":None, "newly_elevated":False}
+        item = {"agency_id":agency,"agency":agency_name, **current, "eligible":eligible, "proposal_to_final_ratio":current_ratio, "activity_to_final_ratio":(current["proposed_rules"] + current["notices"]) / current["final_rules"] if current["final_rules"] else None, "workload_metric":"activity_to_final_ratio", "history_sample_size":len(histories), "history_mean":statistics.fmean(histories) if histories else None, "history_standard_deviation":statistics.pstdev(histories) if len(histories)>1 else None, "prior_month_ratio":prior_ratio, "history_z_score":None, "current_percentile":None, "newly_elevated":False,"selection_reason":"not selected: evidence threshold not met","comparison_basis":"current rolling 12 months versus prior eligible windows and cross-sectional agency percentile","source_cadence":"daily_federal_register","confidence":"insufficient" if not eligible else "medium","confidence_reasons":[f"{current['proposed_rules']} proposals",f"{current['final_rules']} final rules",f"{len(histories)} eligible history windows"]}
         if eligible and current_ratio is not None: current_values.append(current_ratio)
         items.append(item)
     for item in items:
@@ -152,4 +153,7 @@ def compute_pipeline_metrics(conn: sqlite3.Connection, as_of: str) -> dict:
         percentile_path = item["current_percentile"] >= 95 and item["prior_month_ratio"] is not None and item["proposal_to_final_ratio"] >= item["prior_month_ratio"] * 1.25
         item["newly_elevated"] = bool(history_path or percentile_path)
         item["alert_basis"] = "history_z_and_percentile" if history_path else ("cross_sectional_and_month_change" if percentile_path else None)
+        if item["newly_elevated"]:
+            item["selection_reason"] = "proposal-to-final ratio is newly elevated"
+            item["confidence"] = "high" if history_path else "medium"
     return {**_meta(as_of), "source":"federal_register", "metric":"rulemaking_pipeline", "items":items, "primary_metric":"proposal_to_final_ratio", "context_metric":"activity_to_final_ratio", "history_window_months":12}

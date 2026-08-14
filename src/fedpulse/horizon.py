@@ -44,6 +44,13 @@ def compute_marc_horizon(conn: sqlite3.Connection, as_of: str, recent_days: int 
     for subject, all_rows in sorted(groups.items()):
         recent = [r for r in all_rows if r.get("cataloged_date") and r["cataloged_date"] >= recent_start.isoformat()]
         if not recent: continue
-        item = horizon_confidence(recent); item.update({"subject":subject,"last_four_week_catalog_count":len(recent),"prior_baseline_count":sum(1 for r in all_rows if r.get("cataloged_date") and r["cataloged_date"] < recent_start.isoformat()),"source":"marc","date_basis":"cataloged_date"})
+        prior_count=sum(1 for r in all_rows if r.get("cataloged_date") and r["cataloged_date"] < recent_start.isoformat())
+        first_row=conn.execute("select s.first_seen_date from subject_first_seen s join records r on r.id=s.first_record_id and r.source='marc' where lower(s.subject)=lower(?)",(subject,)).fetchone()
+        global_first=first_row[0] if first_row else min(r["cataloged_date"] for r in all_rows if r.get("cataloged_date"))
+        agencies={_row_agency(r) for r in recent if _row_agency(r)}
+        is_new=global_first >= recent_start.isoformat()
+        is_accelerating=prior_count > 0 and len(recent) >= max(3, prior_count * 2) and len(agencies) >= 2
+        if not (is_new or is_accelerating): continue
+        item = horizon_confidence(recent); item.update({"subject":subject,"horizon_state":"new" if is_new else "accelerating","last_four_week_catalog_count":len(recent),"prior_baseline_count":prior_count,"first_seen_cataloged":global_first,"first_seen_label":"First seen cataloged","selection_reason":"first seen in recent catalog window" if is_new else "recent catalog count at least doubled baseline across two agencies","comparison_basis":"last 4 catalog weeks versus prior 4 catalog weeks","source_cadence":"monthly_gpo_maintenance","confidence_reasons":[f"{len(recent)} recent records",f"{len(agencies)} canonical agencies",f"first cataloged {global_first}"],"source":"marc","date_basis":"cataloged_date"})
         items.append(item)
     return {"schema_version":2,"as_of":as_of,"as_of_timezone":"America/New_York","generated_at":dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00","Z"),"generated_at_timezone":"UTC","source":"marc","catalog_date_field":"cataloged_date","items":items}

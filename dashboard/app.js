@@ -32,7 +32,7 @@ function renderPackages() {
   const wantedConfidence = $("confidence-filter").value; const wantedLifecycle = $("lifecycle-filter").value;
   const items = state.packages.filter((p) => (!wantedConfidence || p.confidence === wantedConfidence) && (!wantedLifecycle || (p.lifecycle || "new") === wantedLifecycle) && packageMatches(p));
   $("package-count").textContent = String(items.length);
-  $("packages").innerHTML = items.length ? items.map((p) => `<article class="card ${p.confidence === "low" ? "low-confidence" : ""} ${esc(p.confidence || "unknown")}"><div class="card-top"><h3>${text(p.label || p.canonical_agency_name)}</h3><span class="badge ${esc(p.confidence)}">${text(p.confidence)}</span></div><p class="meta">${text(p.date_start)} → ${text(p.date_end)} · ${text(p.direction)} · ${text(p.lifecycle || "new")} · ${text(p.record_count,"0")} records</p><p class="meta">coordination: ${text(p.coordination_agency_id || p.agency_id)} · taxonomy ${esc(JSON.stringify(p.taxonomy_versions || {}))}</p><details><summary>Evidence (${esc((p.evidence || []).length)})</summary><div class="evidence">${evidenceLinks(p.evidence)}<p class="meta">${(p.confidence_reasons || []).map(text).join(" · ")}</p></div></details></article>`).join("") : `<div class="empty">No packages match these filters.</div>`;
+  $("packages").innerHTML = items.length ? items.map((p) => `<article class="card ${p.confidence === "low" ? "low-confidence" : ""} ${esc(p.confidence || "unknown")}"><div class="card-top"><h3>${text(p.label || p.canonical_agency_name)}</h3><span class="badge ${esc(p.confidence)}">${text(p.confidence)}</span></div><p class="meta">${text(p.date_start)} → ${text(p.date_end)} · ${text(p.direction)} · ${text(p.lifecycle || "new")} · ${text(p.record_count,"0")} records</p><p class="meta">coordination: ${text(p.coordination_agency_id || p.agency_id)} · taxonomy ${esc(JSON.stringify(p.taxonomy_versions || {}))}</p><p class="meta">priority: ${esc(Object.entries(p.priority_components || {}).map(([key,value]) => `${key}=${value}`).join(" · "))}</p><details><summary>Evidence (${esc((p.evidence || []).length)})</summary><div class="evidence">${evidenceLinks(p.evidence)}<p class="meta">${(p.confidence_reasons || []).map(text).join(" · ")}</p></div></details></article>`).join("") : `<div class="empty">No packages match these filters.</div>`;
 }
 function renderStandalone() {
   $("standalone-count").textContent = String(state.standalone.length);
@@ -48,13 +48,13 @@ function renderMarc() {
 async function load() {
   try {
     const [daily, packages, standalone, frMetrics, marc, health, brief] = await Promise.all([
-      fetch("../data/outputs/daily_activity.json").then((r) => r.json()),
-      fetch("../data/outputs/packages.json").then((r) => r.json()),
-      fetch("../data/outputs/standalone.json").then((r) => r.json()),
-      fetch("../data/outputs/fr_metrics.json").then((r) => r.json()),
-      fetch("../data/outputs/marc_horizon.json").then((r) => r.json()),
-      fetch("../data/outputs/health.json").then((r) => r.json()),
-      fetch("../data/outputs/brief.json").then((r) => r.json()),
+      fetch("../data/outputs/current/daily_activity.json").then((r) => r.json()),
+      fetch("../data/outputs/current/packages.json").then((r) => r.json()),
+      fetch("../data/outputs/current/standalone.json").then((r) => r.json()),
+      fetch("../data/outputs/current/fr_metrics.json").then((r) => r.json()),
+      fetch("../data/outputs/current/marc_horizon.json").then((r) => r.json()),
+      fetch("../data/outputs/current/health.json").then((r) => r.json()),
+      fetch("../data/outputs/current/brief.json").then((r) => r.json()),
     ]);
     for (const payload of [daily, packages, standalone, frMetrics, marc, health, brief]) {
       if (payload.schema_version !== 2) throw new Error("unsupported output schema");

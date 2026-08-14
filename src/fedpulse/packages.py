@@ -129,7 +129,8 @@ def _core_key(component: Sequence[EnrichedRecord]) -> str:
     else:
         dirs = [r.direction for r in component if r.direction != "mixed_or_unknown"]
         sectors = sorted(set.intersection(*[{x["sector"] for x in r.sectors} for r in component])) if component and all(r.sectors for r in component) else []
-        basis = "direction:" + (max(set(dirs), key=dirs.count) if dirs else "mixed_or_unknown") + ":sector:" + (sectors[0] if sectors else "unknown")
+        dominant = sorted(set(dirs), key=lambda value: (-dirs.count(value), value))[0] if dirs else "mixed_or_unknown"
+        basis = "direction:" + dominant + ":sector:" + (sectors[0] if sectors else "unknown")
     return hashlib.sha256(("package-core-v1|" + basis).encode()).hexdigest()[:12]
 
 def _coordination(component: Sequence[EnrichedRecord]) -> dict[str, Any]:
@@ -150,8 +151,7 @@ def package_identity(component: Sequence[EnrichedRecord], prior_state: Mapping[s
         package_id = prior_state["package_id"]
     else:
         agency = coordination["coordination_agency_id"] or "unmapped"
-        participants = "+".join(coordination["participating_agency_ids"])
-        package_id = f"{agency}:{participants}:{ordered[0].publication_date.isoformat()}:{_core_key(ordered)}"
+        package_id = f"{agency}:{ordered[0].publication_date.isoformat()}:{_core_key(ordered)}"
     core_key = prior_state.get("core_cluster_key") if prior_state else None
     return {"package_id": package_id, "core_cluster_key": core_key or _core_key(ordered), "agency_id": ordered[0].canonical_agency_id, "coordination_agency_id": coordination["coordination_agency_id"], "participating_agency_ids": coordination["participating_agency_ids"], "earliest_publication_date": ordered[0].publication_date.isoformat()}
 
@@ -208,11 +208,12 @@ def detect_packages(conn: sqlite3.Connection, as_of: str, lookback_days: int = 1
         return max(ranked, key=lambda x: x[:-1])[-1] if ranked else None
     return [score_package(c, prior_state=prior_for(c)) for c in bounded_components(records, candidate_edges(records))]
 
-def persist_package_versions(conn: sqlite3.Connection, packages: list[dict[str, Any]], now: str) -> list[dict[str, Any]]:
+def persist_package_versions(conn: sqlite3.Connection, packages: list[dict[str, Any]], now: str, *, commit: bool = True) -> list[dict[str, Any]]:
     out = []
     for package in sorted(packages, key=lambda p: p["package_id"]):
         member_ids = sorted(e["record_id"] for e in package.get("evidence", []))
-        canonical = json.dumps({"package_id":package["package_id"],"records":member_ids,"direction":package["direction"],"confidence":package["confidence"],"taxonomy_versions":package.get("taxonomy_versions", taxonomy_versions())}, sort_keys=True, separators=(",", ":"))
+        version_payload = {key:value for key,value in package.items() if key not in {"lifecycle","notify","package_version_id","supersedes_version_id"}}
+        canonical = json.dumps(version_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         version_id = hashlib.sha256(canonical.encode()).hexdigest()[:16]
         prior = conn.execute("select * from package_versions where package_id=? order by created_at desc limit 1", (package["package_id"],)).fetchone()
         supersedes = prior["package_version_id"] if prior and prior["package_version_id"] != version_id else None
@@ -222,4 +223,5 @@ def persist_package_versions(conn: sqlite3.Connection, packages: list[dict[str, 
                 if conn.execute("select 1 from records where id=?", (record_id,)).fetchone():
                     conn.execute("insert or ignore into package_version_records values (?, ?)", (version_id, record_id))
         package = dict(package); package.update({"package_version_id":version_id,"supersedes_version_id":supersedes}); out.append(package)
-    conn.commit(); return out
+    if commit: conn.commit()
+    return out

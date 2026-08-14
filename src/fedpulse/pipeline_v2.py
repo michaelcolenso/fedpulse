@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 from . import db, fr_client, marc_sync
 from .health import record_attempt, record_failure, record_success
-from .outputs_v2 import build_v2_outputs
+from .outputs_v2 import build_v2_outputs, publish_failure_outputs
 
 @contextmanager
 def acquire_lock(path: Path):
@@ -23,22 +23,35 @@ def acquire_lock(path: Path):
         try: fcntl.flock(fh.fileno(),fcntl.LOCK_UN)
         finally: fh.close()
 
+def pipeline_lock_path(db_path: Path) -> Path:
+    db_path=Path(db_path)
+    return db_path.with_name(f".{db_path.name}.pipeline.lock")
+
 def run_pipeline(db_path: Path, out_dir: Path, as_of: str | None = None, *, ingest_fr: bool = True, sync_marc: bool = True, fr_fetcher: Callable | None = None, marc_syncer: Callable | None = None, now: dt.datetime | None = None) -> int:
     now = now or dt.datetime.now(dt.timezone.utc)
     if now.tzinfo is None: now = now.replace(tzinfo=dt.timezone.utc)
     as_of=as_of or now.astimezone(ZoneInfo("America/New_York")).date().isoformat(); out_dir=Path(out_dir)
-    with acquire_lock(out_dir/".pipeline.lock"):
+    db_path=Path(db_path); lock_path=pipeline_lock_path(db_path)
+    with acquire_lock(lock_path):
         conn=db.connect(db_path); db.init_db(conn); stamp=now.isoformat().replace("+00:00","Z"); record_attempt(conn,"pipeline",stamp)
         if ingest_fr:
             record_attempt(conn,"federal_register",stamp)
             try:
                 docs=(fr_fetcher or fr_client.pull_days)()
+                count=0
+                conn.execute("begin immediate")
                 for doc in docs:
                     row=doc if "source" in doc else fr_client.to_record(doc)
+                    if not row.get("id") or row["id"] == "fr:" or (row.get("source") == "fr" and not row["id"].startswith("fr:")):
+                        raise ValueError("Federal Register document is missing a valid document_number")
                     db.upsert_record(conn,row)
-                conn.commit(); record_success(conn,"federal_register",stamp,f"records={len(docs)}")
+                    count += 1
+                conn.commit(); record_success(conn,"federal_register",stamp,f"records={count}")
             except Exception as exc:
-                record_failure(conn,"federal_register",stamp,str(exc)); record_failure(conn,"pipeline",stamp,str(exc)); conn.close(); return 1
+                conn.rollback(); record_failure(conn,"federal_register",stamp,str(exc)); record_failure(conn,"pipeline",stamp,str(exc))
+                try: publish_failure_outputs(conn,as_of,out_dir,now,str(exc))
+                finally: conn.close()
+                return 1
         if sync_marc:
             record_attempt(conn,"marc",stamp)
             try:
@@ -47,12 +60,15 @@ def run_pipeline(db_path: Path, out_dir: Path, as_of: str | None = None, *, inge
                 record_success(conn,"marc",stamp,"maintenance sync complete")
             except Exception as exc:
                 record_failure(conn,"marc",stamp,str(exc))
+        record_success(conn,"pipeline",stamp,"sources complete; publishing v2 outputs")
         try:
             build_v2_outputs(conn,as_of,out_dir,now)
-            record_success(conn,"pipeline",stamp,"v2 outputs written")
             conn.close(); return 0
         except Exception as exc:
-            record_failure(conn,"pipeline",stamp,str(exc)); conn.close(); return 1
+            record_failure(conn,"pipeline",stamp,str(exc))
+            try: publish_failure_outputs(conn,as_of,out_dir,now,str(exc))
+            finally: conn.close()
+            return 1
 
 def main(argv=None) -> int:
     parser=argparse.ArgumentParser(); parser.add_argument("--db",type=Path,default=Path("data/fedpulse.db")); parser.add_argument("--out",type=Path,default=Path("data/outputs")); parser.add_argument("--as-of"); parser.add_argument("--skip-ingest",action="store_true"); parser.add_argument("--skip-marc",action="store_true"); args=parser.parse_args(argv)
