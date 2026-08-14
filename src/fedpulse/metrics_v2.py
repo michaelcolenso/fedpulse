@@ -71,28 +71,58 @@ def percentile_rank(values, value: float) -> float:
     below = sum(v < value for v in values); equal = sum(v == value for v in values)
     return round(100 * (below + .5 * equal) / len(values), 6)
 
-def compute_pipeline_metrics(conn: sqlite3.Connection, as_of: str) -> dict:
-    """Compute FR-only rolling proposal/final and notices workload ratios."""
-    end = date.fromisoformat(as_of); start = end - timedelta(days=365)
-    rows = conn.execute("select canonical_agency_id, agency, doc_type, publication_date from records where source='fr' and publication_date between ? and ?", (start.isoformat(), end.isoformat())).fetchall()
-    counts: dict[str, dict[str,int]] = {}
+def _month_shift(value: date, months: int) -> date:
+    index = value.year * 12 + value.month - 1 + months
+    return date(index // 12, index % 12 + 1, 1)
+
+def _window_counts(rows, start: date, end: date) -> dict[str, int]:
+    out = {"proposed_rules": 0, "final_rules": 0, "notices": 0}
     for row in rows:
-        key = row["canonical_agency_id"] or row["agency"] or "unmapped"
-        counts.setdefault(key, {"proposed_rules":0,"final_rules":0,"notices":0})
+        d = date.fromisoformat(row["publication_date"])
+        if not start <= d <= end: continue
         typ = (row["doc_type"] or "").lower().replace("-", "_").replace(" ", "_")
-        if typ in {"rule","final_rule"}: counts[key]["final_rules"] += 1
-        elif typ == "proposed_rule": counts[key]["proposed_rules"] += 1
-        elif typ == "notice": counts[key]["notices"] += 1
-    eligible = []; items=[]
-    for agency, c in sorted(counts.items()):
-        total = sum(c.values()); eligible_flag = c["final_rules"] >= 10 or (total >= 50 and c["final_rules"] >= 5)
-        primary = c["proposed_rules"] / c["final_rules"] if c["final_rules"] else None
-        workload = (c["proposed_rules"] + c["notices"]) / c["final_rules"] if c["final_rules"] else None
-        if eligible_flag and primary is not None: eligible.append(primary)
-        items.append({"agency":agency, **c, "eligible":eligible_flag, "proposal_to_final_ratio":primary, "activity_to_final_ratio":workload, "workload_metric":"activity_to_final_ratio"})
+        if typ in {"rule", "final_rule"}: out["final_rules"] += 1
+        elif typ == "proposed_rule": out["proposed_rules"] += 1
+        elif typ == "notice": out["notices"] += 1
+    return out
+
+def _ratio(counts: dict[str, int]) -> float | None:
+    return counts["proposed_rules"] / counts["final_rules"] if counts["final_rules"] else None
+
+def _eligible(counts: dict[str, int]) -> bool:
+    total = sum(counts.values())
+    return counts["final_rules"] >= 10 or (total >= 50 and counts["final_rules"] >= 5)
+
+def compute_pipeline_metrics(conn: sqlite3.Connection, as_of: str) -> dict:
+    """Compute separate proposal/final and notices workload ratios with sample/history gates."""
+    end = date.fromisoformat(as_of); query_start = _month_shift(end.replace(day=1), -25)
+    rows = conn.execute("select canonical_agency_id, agency, doc_type, publication_date from records where source='fr' and publication_date between ? and ?", (query_start.isoformat(), end.isoformat())).fetchall()
+    agencies = sorted({r["canonical_agency_id"] or r["agency"] or "unmapped" for r in rows})
+    current_values = []; items = []
+    for agency in agencies:
+        current_start = _month_shift(end.replace(day=1), -11)
+        agency_rows = [r for r in rows if (r["canonical_agency_id"] or r["agency"] or "unmapped") == agency]
+        current = _window_counts(agency_rows, current_start, end)
+        current_ratio = _ratio(current); eligible = _eligible(current)
+        histories = []
+        for shift in range(1, 14):
+            window_end = _month_shift(end.replace(day=1), -shift) - timedelta(days=1)
+            window_start = _month_shift(window_end.replace(day=1), -11)
+            c = _window_counts(agency_rows, window_start, window_end)
+            if _eligible(c) and _ratio(c) is not None: histories.append(_ratio(c))
+        prior_end = _month_shift(end.replace(day=1), -1) - timedelta(days=1)
+        prior_start = _month_shift(prior_end.replace(day=1), -11)
+        prior_ratio = _ratio(_window_counts(agency_rows, prior_start, prior_end))
+        item = {"agency":agency, **current, "eligible":eligible, "proposal_to_final_ratio":current_ratio, "activity_to_final_ratio":(current["proposed_rules"] + current["notices"]) / current["final_rules"] if current["final_rules"] else None, "workload_metric":"activity_to_final_ratio", "history_sample_size":len(histories), "history_mean":statistics.fmean(histories) if histories else None, "history_standard_deviation":statistics.pstdev(histories) if len(histories)>1 else None, "prior_month_ratio":prior_ratio, "history_z_score":None, "current_percentile":None, "newly_elevated":False}
+        if eligible and current_ratio is not None: current_values.append(current_ratio)
+        items.append(item)
     for item in items:
-        if item["proposal_to_final_ratio"] is not None and item["eligible"]:
-            item["current_percentile"] = percentile_rank(eligible, item["proposal_to_final_ratio"])
-            item["newly_elevated"] = item["current_percentile"] >= 95
-        else: item["current_percentile"] = None; item["newly_elevated"] = False
-    return {**_meta(as_of), "source":"federal_register", "metric":"rulemaking_pipeline", "items":items, "primary_metric":"proposal_to_final_ratio", "context_metric":"activity_to_final_ratio"}
+        if not item["eligible"] or item["proposal_to_final_ratio"] is None: continue
+        item["current_percentile"] = percentile_rank(current_values, item["proposal_to_final_ratio"])
+        if item["history_sample_size"] >= 12 and item["history_standard_deviation"] and item["history_standard_deviation"] > 0:
+            item["history_z_score"] = round((item["proposal_to_final_ratio"] - item["history_mean"]) / item["history_standard_deviation"], 6)
+        history_path = item["history_z_score"] is not None and item["history_z_score"] >= 2.5 and item["current_percentile"] >= 80
+        percentile_path = item["current_percentile"] >= 95 and item["prior_month_ratio"] is not None and item["proposal_to_final_ratio"] >= item["prior_month_ratio"] * 1.25
+        item["newly_elevated"] = bool(history_path or percentile_path)
+        item["alert_basis"] = "history_z_and_percentile" if history_path else ("cross_sectional_and_month_change" if percentile_path else None)
+    return {**_meta(as_of), "source":"federal_register", "metric":"rulemaking_pipeline", "items":items, "primary_metric":"proposal_to_final_ratio", "context_metric":"activity_to_final_ratio", "history_window_months":12}
