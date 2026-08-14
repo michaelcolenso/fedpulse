@@ -76,4 +76,15 @@ class TestLifecycle(unittest.TestCase):
             changed=update_signal_state(conn,[{"signal_key":"p","signal_type":"package","status":"qualified","direction":"increase_or_require","confidence":"high","payload":{}}],now+dt.timedelta(hours=1))
             self.assertTrue(changed[0]["notify"])
 
+    def test_package_member_growth_waits_for_cooldown_then_notifies(self):
+        with temp_db() as conn:
+            now=dt.datetime(2026,8,10,12,tzinfo=dt.timezone.utc)
+            first={"signal_key":"p","signal_type":"package","status":"qualified","direction":"reduce_or_rescind","confidence":"high","payload":{"evidence":[{"record_id":"a"}],"document_type_counts":{"notice":1}}}
+            grown={**first,"payload":{"evidence":[{"record_id":"a"},{"record_id":"b"}],"document_type_counts":{"notice":2}}}
+            update_signal_state(conn,[first],now)
+            early=update_signal_state(conn,[grown],now+dt.timedelta(hours=1))
+            self.assertFalse(early[0]["notify"])
+            due=update_signal_state(conn,[grown],now+dt.timedelta(hours=49))
+            self.assertTrue(due[0]["notify"])
+
 if __name__ == "__main__": unittest.main()

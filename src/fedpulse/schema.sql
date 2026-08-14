@@ -17,6 +17,7 @@ CREATE INDEX IF NOT EXISTS idx_records_source ON records(source);
 CREATE INDEX IF NOT EXISTS idx_records_cataloged_date ON records(cataloged_date);
 CREATE INDEX IF NOT EXISTS idx_records_pub_date ON records(publication_date);
 CREATE INDEX IF NOT EXISTS idx_records_canonical_agency_date ON records(canonical_agency_id, publication_date);
+CREATE INDEX IF NOT EXISTS idx_records_mapping_version ON records(agency_mapping_version, id);
 
 CREATE TABLE IF NOT EXISTS ingest_runs (
     run_id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT NOT NULL, started_at TEXT NOT NULL,

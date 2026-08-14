@@ -1,6 +1,6 @@
 import unittest
 from dataclasses import replace
-from tests.v2_helpers import load_case, temp_db, seed_records
+from tests.v2_helpers import fr_record, load_case, temp_db, seed_records
 from fedpulse.normalize_agencies import normalize_all
 from fedpulse.packages import (bounded_components, candidate_edges, detect_packages, enrich_record, package_identity, persist_package_versions, score_package)
 
@@ -74,6 +74,25 @@ class TestPackages(unittest.TestCase):
         self.assertEqual(result["coordination_agency_id"], "hhs")
         unrelated = replace(rows[1], canonical_agency_id="fictional-child", canonical_agency_name="Fictional Child", parent_id="other-parent")
         self.assertEqual(bounded_components([rows[0], unrelated], candidate_edges([rows[0], unrelated])), [])
+
+    def test_parent_coordination_allows_multiple_records_per_child(self):
+        rows = self._enriched("cdc_funding_package")
+        sibling = replace(rows[0], record_id="fr:hhs-sibling", canonical_agency_id="fictional-child", canonical_agency_name="Fictional Child", parent_id="hhs")
+        result = score_package(rows + [sibling])
+        self.assertEqual(result["coordination_agency_id"], "hhs")
+        self.assertIn(result["confidence"], {"high", "medium"})
+
+    def test_concurrent_same_agency_packages_do_not_reconcile_without_core_match(self):
+        with temp_db() as conn:
+            first = [fr_record(f"a-{i}", "National Credit Union Administration", "2026-08-01", title="Remove credit union burden", topics=["Credit unions"]) for i in range(3)]
+            second = [fr_record(f"b-{i}", "National Credit Union Administration", "2026-08-01", title="Require cybersecurity controls", topics=["Cybersecurity"]) for i in range(3)]
+            seed_records(conn, first); normalize_all(conn)
+            initial = persist_package_versions(conn, detect_packages(conn, "2026-08-01"), "2026-08-01T12:00:00Z")
+            seed_records(conn, second); normalize_all(conn)
+            later = detect_packages(conn, "2026-08-01")
+            self.assertEqual(len(later), 2)
+            self.assertEqual(sum(p["package_id"] == initial[0]["package_id"] for p in later), 1)
+            self.assertEqual(len({p["package_id"] for p in later}), 2)
 
     def test_detect_reconciles_added_member_against_persisted_package(self):
         with temp_db() as conn:

@@ -38,6 +38,7 @@ def source_freshness(conn: sqlite3.Connection, now: str | dt.datetime) -> dict[s
         fields = {"last_attempt":row["last_attempt"],"last_success":success,"status":status,"detail":row["detail"]}
         if component == "federal_register":
             fields["last_publication_date"] = conn.execute("select max(publication_date) from records where source='fr' and publication_date is not null").fetchone()[0]
+            fields["fetched_at"] = success
         if component == "marc":
             fields["last_cataloged_date"] = conn.execute("select max(cataloged_date) from records where source='marc' and cataloged_date is not null").fetchone()[0]
             fields["maintenance_applied_at"] = success
@@ -48,6 +49,7 @@ def source_freshness(conn: sqlite3.Connection, now: str | dt.datetime) -> dict[s
         fields = {"last_attempt":None,"last_success":None,"status":"degraded","detail":"no ingest attempt recorded"}
         if component == "federal_register":
             fields["last_publication_date"] = conn.execute("select max(publication_date) from records where source='fr' and publication_date is not null").fetchone()[0]
+            fields["fetched_at"] = None
         else:
             fields["last_cataloged_date"] = conn.execute("select max(cataloged_date) from records where source='marc' and cataloged_date is not null").fetchone()[0]
             fields["maintenance_applied_at"] = None

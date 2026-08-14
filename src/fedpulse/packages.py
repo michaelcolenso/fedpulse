@@ -137,7 +137,7 @@ def _coordination(component: Sequence[EnrichedRecord]) -> dict[str, Any]:
     parents = sorted({r.parent_id for r in component if r.parent_id})
     if len(component) == 1 and len(ids) == 1:
         return {"known": True, "coordination_agency_id": ids[0], "participating_agency_ids": ids}
-    if len(ids) == len(component) and len(ids) >= 2 and len(parents) == 1:
+    if len(ids) >= 2 and len(parents) == 1 and all(r.canonical_agency_id and r.parent_id == parents[0] for r in component):
         return {"known": True, "coordination_agency_id": parents[0], "participating_agency_ids": ids}
     if len(ids) == 1 and all(r.canonical_agency_id == ids[0] for r in component):
         return {"known": True, "coordination_agency_id": ids[0], "participating_agency_ids": ids}
@@ -152,7 +152,8 @@ def package_identity(component: Sequence[EnrichedRecord], prior_state: Mapping[s
         agency = coordination["coordination_agency_id"] or "unmapped"
         participants = "+".join(coordination["participating_agency_ids"])
         package_id = f"{agency}:{participants}:{ordered[0].publication_date.isoformat()}:{_core_key(ordered)}"
-    return {"package_id": package_id, "core_cluster_key": _core_key(ordered), "agency_id": ordered[0].canonical_agency_id, "coordination_agency_id": coordination["coordination_agency_id"], "participating_agency_ids": coordination["participating_agency_ids"], "earliest_publication_date": ordered[0].publication_date.isoformat()}
+    core_key = prior_state.get("core_cluster_key") if prior_state else None
+    return {"package_id": package_id, "core_cluster_key": core_key or _core_key(ordered), "agency_id": ordered[0].canonical_agency_id, "coordination_agency_id": coordination["coordination_agency_id"], "participating_agency_ids": coordination["participating_agency_ids"], "earliest_publication_date": ordered[0].publication_date.isoformat()}
 
 def score_package(component: Sequence[EnrichedRecord], metrics: Mapping[str, Any] | None = None, watchlists: Any = None, prior_state: Mapping[str, Any] | None = None) -> dict[str, Any]:
     ordered = sorted(component, key=lambda r: (r.publication_date, r.record_id))
@@ -179,26 +180,32 @@ def score_package(component: Sequence[EnrichedRecord], metrics: Mapping[str, Any
     versions = taxonomy_versions()
     for entry in evidence:
         entry["metadata"]["taxonomy_versions"] = versions
-    return {**identity, "canonical_agency_name": ordered[0].canonical_agency_name, "raw_agency_names": sorted({r.raw_agency for r in ordered}), "date_start": ordered[0].publication_date.isoformat(), "date_end": ordered[-1].publication_date.isoformat(), "label": f"{ordered[0].canonical_agency_name or ordered[0].raw_agency} · {len(ordered)} actions · {dominant}", "direction": dominant, "matched_phrases": matched, "coverage_tags":[{"sector":a,"source":b,"matched_value":c} for a,b,c in coverage], "record_count":len(ordered), "document_type_counts":{t:sum(r.doc_type==t for r in ordered) for t in sorted({r.doc_type for r in ordered})}, "confidence":confidence, "confidence_reasons":["coherent exact metadata", f"direction coverage {direction_ratio:.0%}", "canonical agency known" if known else "agency unmapped", "all official URLs present" if urls else "missing official URL"], "priority_score":sum(components.values()), "priority_components":components, "evidence":evidence, "taxonomy_versions":versions, "lifecycle":"new"}
+    participant_names = sorted({r.canonical_agency_name for r in ordered if r.canonical_agency_name})
+    coordination_name = participant_names[0] if len(participant_names) == 1 else f"{identity['coordination_agency_id']} ({'; '.join(participant_names)})"
+    display_name = coordination_name or ordered[0].raw_agency
+    return {**identity, "canonical_agency_name": display_name, "participating_agency_names":participant_names, "raw_agency_names": sorted({r.raw_agency for r in ordered}), "date_start": ordered[0].publication_date.isoformat(), "date_end": ordered[-1].publication_date.isoformat(), "label": f"{display_name} · {len(ordered)} actions · {dominant}", "direction": dominant, "matched_phrases": matched, "coverage_tags":[{"sector":a,"source":b,"matched_value":c} for a,b,c in coverage], "record_count":len(ordered), "document_type_counts":{t:sum(r.doc_type==t for r in ordered) for t in sorted({r.doc_type for r in ordered})}, "confidence":confidence, "confidence_reasons":["coherent exact metadata", f"direction coverage {direction_ratio:.0%}", "canonical agency known" if known else "agency unmapped", "all official URLs present" if urls else "missing official URL"], "priority_score":sum(components.values()), "priority_components":components, "evidence":evidence, "taxonomy_versions":versions, "lifecycle":"new"}
 
 def detect_packages(conn: sqlite3.Connection, as_of: str, lookback_days: int = 14) -> list[dict[str, Any]]:
     end = date.fromisoformat(as_of); start = end - timedelta(days=lookback_days)
     rows = conn.execute("select * from records where source='fr' and publication_date between ? and ? order by publication_date,id", (start.isoformat(), end.isoformat())).fetchall()
     records = [enrich_record(r) for r in rows]
     def prior_for(component):
-        ids = {r.record_id for r in component}; agency_ids = {r.canonical_agency_id for r in component if r.canonical_agency_id}; start = min(r.publication_date for r in component); end_date = max(r.publication_date for r in component)
+        ids = {r.record_id for r in component}; coordination = _coordination(component); start = min(r.publication_date for r in component); core_key = _core_key(component)
         candidates = conn.execute("select * from package_versions order by created_at desc").fetchall()
+        ranked = []
         for prior in candidates:
             members = {x["record_id"] for x in conn.execute("select record_id from package_version_records where package_version_id=?", (prior["package_version_id"],))}
             if not members:
                 try: members = {x["record_id"] for x in json.loads(prior["payload_json"]).get("evidence", [])}
                 except (TypeError, json.JSONDecodeError): members = set()
-            if ids & members:
-                return json.loads(prior["payload_json"])
             payload = json.loads(prior["payload_json"])
-            if payload.get("coordination_agency_id") in agency_ids and payload.get("date_start") and abs((start - date.fromisoformat(payload["date_start"])).days) <= lookback_days:
-                return payload
-        return None
+            overlap = len(ids & members)
+            same_core = payload.get("core_cluster_key") == core_key
+            same_coordination = payload.get("coordination_agency_id") == coordination["coordination_agency_id"]
+            close_date = bool(payload.get("date_start") and abs((start - date.fromisoformat(payload["date_start"])).days) <= 2)
+            if overlap or (same_core and same_coordination and close_date):
+                ranked.append((overlap, int(same_core), -abs((start - date.fromisoformat(payload["date_start"])).days), payload.get("package_id", ""), payload))
+        return max(ranked, key=lambda x: x[:-1])[-1] if ranked else None
     return [score_package(c, prior_state=prior_for(c)) for c in bounded_components(records, candidate_edges(records))]
 
 def persist_package_versions(conn: sqlite3.Connection, packages: list[dict[str, Any]], now: str) -> list[dict[str, Any]]:

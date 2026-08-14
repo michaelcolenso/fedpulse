@@ -41,7 +41,15 @@ def _daily(conn, as_of: str) -> dict:
     return {"date":as_of,"total_records":len(rows),"document_type_counts":counts,"agency_counts":agencies}
 
 def build_brief(payloads: Mapping[str, dict]) -> dict:
-    health=payloads.get("health",{}); packages=[p for p in payloads.get("packages",{}).get("items",[]) if p.get("confidence") in {"high","medium"} and p.get("lifecycle","new") != "resolved"]; standalone=[p for p in payloads.get("standalone",{}).get("items",[]) if p.get("lifecycle","new") != "resolved"]; daily=payloads.get("daily_activity",{}).get("items",[]); metrics=[p for p in payloads.get("fr_metrics",{}).get("items",[]) if p.get("alert") or p.get("metric") in {"weekly_activity_spike","sustained_level_shift","rulemaking_pipeline"}]; horizon=[p for p in payloads.get("marc_horizon",{}).get("items",[]) if p.get("confidence") in {"high","medium"} and p.get("lifecycle","new") != "resolved"]
+    health=payloads.get("health",{})
+    packages=[p for p in payloads.get("packages",{}).get("items",[]) if p.get("confidence") in {"high","medium"} and p.get("notify")]
+    standalone=[p for p in payloads.get("standalone",{}).get("items",[]) if p.get("notify")]
+    daily=payloads.get("daily_activity",{}).get("items",[])
+    metrics=[]
+    for wrapper in payloads.get("fr_metrics",{}).get("items",[]):
+        selected=[item for item in wrapper.get("items",[]) if item.get("notify")]
+        if selected: metrics.append({**wrapper,"items":selected})
+    horizon=[p for p in payloads.get("marc_horizon",{}).get("items",[]) if p.get("confidence") in {"high","medium"} and p.get("notify")]
     sections=[]
     warnings=[{"component":k,"status":v.get("status"),"detail":v.get("detail")} for k,v in health.get("source_freshness",{}).items() if v.get("status") not in {"fresh","running"}]
     if warnings: sections.append({"section":"health","items":warnings})
@@ -86,6 +94,19 @@ def _apply_lifecycle(conn, payloads: dict[str, dict], now: dt.datetime) -> None:
     for item, key in refs:
         if key in lifecycle:
             item.update({"lifecycle": lifecycle[key]["lifecycle"], "notify": lifecycle[key]["notify"]})
+    destinations = {"package":"packages", "standalone":"standalone", "horizon":"marc_horizon"}
+    resolved_metrics=[]
+    for transition in lifecycle.values():
+        if transition.get("lifecycle") != "resolved": continue
+        item=dict(transition.get("payload") or {})
+        item.update({"signal_key":transition["signal_key"],"lifecycle":"resolved","notify":transition.get("notify",False)})
+        destination=destinations.get(transition.get("signal_type"))
+        if destination:
+            payloads[destination].setdefault("items",[]).append(item)
+        elif transition.get("signal_type") == "metric":
+            resolved_metrics.append(item)
+    if resolved_metrics:
+        payloads["fr_metrics"].setdefault("items",[]).append({"metric":"resolved_signals","items":resolved_metrics})
 
 def render_text_brief(brief: Mapping[str, Any]) -> str:
     lines=[f"FEDPULSE — {brief.get('as_of') or 'unknown'}"]

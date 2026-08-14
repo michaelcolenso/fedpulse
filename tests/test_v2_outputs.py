@@ -42,4 +42,14 @@ class TestDigest(unittest.TestCase):
         brief = build_brief({"health":{"source_freshness":{}},"daily_activity":{"items":[]},"packages":{"items":[{"package_id":"low-1","confidence":"low","label":"uncertain"}]},"standalone":{"items":[]},"fr_metrics":{"items":[]},"marc_horizon":{"items":[]}})
         self.assertFalse(any(section["section"] == "high_medium_packages" for section in brief["items"]))
 
+    def test_brief_includes_only_notifiable_metric_rows(self):
+        payload={"metric":"weekly_activity_spike","items":[
+            {"agency":"new","alert":True,"notify":True,"lifecycle":"new"},
+            {"agency":"continuing","alert":True,"notify":False,"lifecycle":"continuing"},
+        ]}
+        brief=build_brief({"health":{"source_freshness":{}},"daily_activity":{"items":[]},"packages":{"items":[]},"standalone":{"items":[]},"fr_metrics":{"items":[payload]},"marc_horizon":{"items":[]}})
+        sections=[s for s in brief["items"] if s["section"] == "supporting_metrics"]
+        self.assertEqual(len(sections),1)
+        self.assertEqual([x["agency"] for x in sections[0]["items"][0]["items"]],["new"])
+
 if __name__ == "__main__": unittest.main()

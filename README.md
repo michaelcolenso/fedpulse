@@ -40,7 +40,7 @@ PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 --db data/fedpulse.db --out
 PYTHONPATH=src uv run python -m fedpulse.backtest --db data/fedpulse.db --out data/outputs/backtest.md
 
 # Serve the dashboard over HTTP (fetch is not supported from file://)
-python3 -m http.server 8000 --directory .
+uv run python -m http.server 8000 --directory .
 # open http://localhost:8000/dashboard/
 ```
 

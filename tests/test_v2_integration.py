@@ -36,10 +36,20 @@ class TestV2Integration(unittest.TestCase):
             package = second["packages"]["items"][0]
             self.assertFalse(package["notify"])
             brief_packages = [x for section in second["brief"]["items"] if section["section"] == "high_medium_packages" for x in section["items"]]
-            self.assertTrue(all(x.get("confidence") in {"high", "medium"} for x in brief_packages))
+            self.assertEqual(brief_packages, [], "unchanged continuing packages stay dashboard-only")
             low_horizon = [x for x in second["marc_horizon"]["items"] if x.get("confidence") not in {"high", "medium"}]
             brief_horizon = [x for section in second["brief"]["items"] if section["section"] == "marc_horizon" for x in section["items"]]
             self.assertFalse(set(map(lambda x: x.get("subject"), low_horizon)) & set(map(lambda x: x.get("subject"), brief_horizon)))
+
+            package_ids=[p["package_id"] for p in second["packages"]["items"]]
+            conn.execute("delete from records where source='fr' and id != 'fr:nist-1'")
+            conn.commit()
+            third=build_v2_outputs(conn,"2026-08-06",out_dir,datetime(2026,8,7,2,tzinfo=timezone.utc))
+            resolved=[p for p in third["packages"]["items"] if p.get("lifecycle") == "resolved"]
+            self.assertEqual(sorted(p["package_id"] for p in resolved), sorted(package_ids))
+            self.assertTrue(all(p.get("notify") for p in resolved))
+            brief_resolved=[x for section in third["brief"]["items"] if section["section"] == "high_medium_packages" for x in section["items"]]
+            self.assertEqual(sorted(p["package_id"] for p in brief_resolved), sorted(package_ids))
 
 
 if __name__ == "__main__":

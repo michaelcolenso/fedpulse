@@ -33,12 +33,17 @@ def normalize_record_agency(conn: sqlite3.Connection, record_id: str) -> AgencyI
 def normalize_all(conn: sqlite3.Connection, batch_size: int = 5000) -> dict[str, int]:
     from .taxonomy import AGENCY_CONFIG
     version = AGENCY_CONFIG["version"]
-    rows = conn.execute("select id from records where agency_mapping_version is null or agency_mapping_version != ? order by id", (version,)).fetchall()
     processed = 0
-    for offset in range(0, len(rows), max(1, batch_size)):
-        for row in rows[offset:offset + max(1, batch_size)]:
+    last_id = ""
+    size = max(1, batch_size)
+    while True:
+        rows = conn.execute("select id from records where id > ? and (agency_mapping_version is null or agency_mapping_version != ?) order by id limit ?", (last_id, version, size)).fetchall()
+        if not rows:
+            break
+        for row in rows:
             normalize_record_agency(conn, row["id"])
             processed += 1
+        last_id = rows[-1]["id"]
         conn.commit()
     mapped = conn.execute("select count(*) from records where canonical_agency_id is not null").fetchone()[0]
     unmapped = conn.execute("select count(*) from records where canonical_agency_id is null").fetchone()[0]

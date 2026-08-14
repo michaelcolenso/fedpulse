@@ -64,7 +64,9 @@ def _delete_from_csv(conn, path: Path) -> dict:
         except StopIteration: return {"rows":0,"valid_ids":0,"deleted":0,"not_present":0,"skipped":0,"header":""}
         normalized = [re.sub(r"[^a-z0-9]", "", h.casefold()) for h in header]
         candidates = {"sysno", "systemnumber"}
-        index = next((i for i, value in enumerate(normalized) if value in candidates), 0)
+        index = next((i for i, value in enumerate(normalized) if value in candidates), None)
+        if index is None:
+            raise ValueError(f"unrecognized deleted-record CSV header: {header!r}")
         header_name = header[index].strip() if header else ""
         for values in reader:
             rows += 1
@@ -126,32 +128,39 @@ def sync(db_path: Path | str | None = None, conn=None, raw_dir: Path | None = No
         db.init_db(conn)
     totals = {"new": 0, "changed": 0, "deleted": 0}
 
-    for month in target:
-        compact = month.replace("-", "")
-        for kind, folder in SETS.items():
-            entries = _get_json(f"{API}/{folder}")
-            for e in entries:
-                name = e.get("name", "")
-                if compact not in name:
-                    continue
-                dest = raw_root / kind / month / name
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                if not dest.exists() or dest.stat().st_size != e.get("size"):
-                    _download(e["download_url"], dest)
-                if kind == "deleted" and dest.suffix.lower() == ".csv":
-                    totals["deleted"] += _delete_from_csv(conn, dest)["deleted"]
-                    continue
-                if zipfile.is_zipfile(dest):
-                    extract_dir = dest.with_suffix("")
-                    with zipfile.ZipFile(dest) as z:
-                        z.extractall(extract_dir)
-                    res = ingest._load_marc_dir(conn, extract_dir, kind)
-                else:
-                    res = ingest._load_marc_dir(conn, dest.parent, kind)
-                totals[kind] += res.get("new", 0) + res.get("changed", 0) + res.get("deleted", 0)
+    try:
+        entries_by_kind = {kind: _get_json(f"{API}/{folder}") for kind, folder in SETS.items()}
+        for month in target:
+            compact = month.replace("-", "")
+            for kind, entries in entries_by_kind.items():
+                for e in entries:
+                    name = e.get("name", "")
+                    if compact not in name:
+                        continue
+                    dest = raw_root / kind / month / name
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    if not dest.exists() or dest.stat().st_size != e.get("size"):
+                        _download(e["download_url"], dest)
+                    if kind == "deleted" and dest.suffix.lower() == ".csv":
+                        totals["deleted"] += _delete_from_csv(conn, dest)["deleted"]
+                        continue
+                    if zipfile.is_zipfile(dest):
+                        extract_dir = dest.with_suffix("")
+                        with zipfile.ZipFile(dest) as z:
+                            z.extractall(extract_dir)
+                        res = ingest._load_marc_dir(conn, extract_dir, kind)
+                    else:
+                        res = ingest._load_marc_dir(conn, dest.parent, kind)
+                    totals[kind] += res.get("new", 0) + res.get("changed", 0) + res.get("deleted", 0)
+        conn.commit()
+        marker.write_text(json.dumps({"month": latest, "at": dt.date.today().isoformat()}))
+    except Exception:
+        conn.rollback()
+        if owns_conn:
+            conn.close()
+        raise
     if owns_conn:
         conn.close()
-    marker.write_text(json.dumps({"month": latest, "at": dt.date.today().isoformat()}))
     print(f"marc_sync: ingested through {latest} ({sum(totals.values())} ops)")
     return 0
 

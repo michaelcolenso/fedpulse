@@ -9,8 +9,13 @@ function evidenceLinks(evidence) {
   return (evidence || []).map((e) => `<a class="evidence-link" href="${esc(safeUrl(e.official_url))}" target="_blank" rel="noopener noreferrer">${text(e.title || e.record_id)} ↗</a>`).join("");
 }
 function packageMatches(p) {
-  const values = [p.canonical_agency_name, p.direction, ...(p.coverage_tags || []).map((x) => x.sector), ...(p.document_type_counts ? Object.keys(p.document_type_counts) : [])].map((x) => String(x || "").toLowerCase());
-  return ["agency-filter", "direction-filter", "sector-filter", "family-filter"].every((id, index) => { const q = ($(id).value || "").trim().toLowerCase(); return !q || values[index === 0 ? 0 : index === 1 ? 1 : index === 2 ? 2 : 3].includes(q); });
+  const values = {
+    "agency-filter": [p.canonical_agency_name, p.coordination_agency_id, ...(p.raw_agency_names || [])].join(" ").toLowerCase(),
+    "direction-filter": String(p.direction || "").toLowerCase(),
+    "sector-filter": (p.coverage_tags || []).map((x) => x.sector).join(" ").toLowerCase(),
+    "family-filter": Object.keys(p.document_type_counts || {}).join(" ").toLowerCase(),
+  };
+  return Object.entries(values).every(([id, value]) => { const q = ($(id).value || "").trim().toLowerCase(); return !q || value.includes(q); });
 }
 function renderFreshness() {
   const entries = Object.entries(state.health.source_freshness || {});
@@ -51,9 +56,12 @@ async function load() {
       fetch("../data/outputs/health.json").then((r) => r.json()),
       fetch("../data/outputs/brief.json").then((r) => r.json()),
     ]);
+    for (const payload of [daily, packages, standalone, frMetrics, marc, health, brief]) {
+      if (payload.schema_version !== 2) throw new Error("unsupported output schema");
+    }
     state.daily = (daily.items || [])[0] || {}; state.packages = packages.items || []; state.standalone = standalone.items || []; state.metrics = frMetrics.items || []; state.marc = marc.items || []; state.health = health; state.brief = brief;
-    $("asof").textContent = `as of ${text(health.as_of || brief.as_of)}`; $("status").textContent = `loaded schema-v2 · ${esc(state.packages.length)} packages · ${esc(state.standalone.length)} standalone · ${esc(state.marc.length)} MARC topics`;
-  } catch (error) { $("status").textContent = `schema-v2 output unavailable: ${esc(error.message)}`; }
+    $("asof").textContent = `as of ${health.as_of || brief.as_of || "—"}`; $("status").textContent = `loaded schema-v2 · ${state.packages.length} packages · ${state.standalone.length} standalone · ${state.marc.length} MARC topics`;
+  } catch (error) { $("status").textContent = `schema-v2 output unavailable: ${error.message}`; }
   renderFreshness(); renderDaily(); renderPackages(); renderStandalone(); renderMetrics(); renderMarc();
 }
 ["agency-filter", "direction-filter", "sector-filter", "family-filter", "confidence-filter", "lifecycle-filter"].forEach((id) => $(id).addEventListener("input", renderPackages));
