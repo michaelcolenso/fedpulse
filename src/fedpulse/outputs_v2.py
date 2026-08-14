@@ -95,15 +95,29 @@ def _daily(conn, as_of: str) -> dict:
         typ=r["doc_type"] or "unknown"; counts[typ]=counts.get(typ,0)+1; key=r["canonical_agency_id"] or r["agency"] or "unmapped"; agencies[key]=agencies.get(key,0)+1
     return {"date":as_of,"total_records":len(rows),"document_type_counts":counts,"agency_counts":agencies}
 
+def _brief_package(package: Mapping[str,Any]) -> dict:
+    keys=("package_id","package_version_id","label","direction","confidence","lifecycle","record_count","date_start","date_end","selection_reason","confidence_reasons","taxonomy_versions")
+    compact={key:package.get(key) for key in keys if key in package}
+    compact["evidence"]=[{key:evidence.get(key) for key in ("record_id","title","official_url","publication_date","doc_type","source","metadata") if key in evidence} for evidence in package.get("evidence",[])]
+    return compact
+
+def _brief_standalone(item: Mapping[str,Any]) -> dict:
+    keys=("record_id","title","official_url","publication_date","doc_type","canonical_agency_name","watchlist","matched_field","matched_value","selection_reason","lifecycle")
+    return {key:item.get(key) for key in keys if key in item}
+
+def _brief_metric(item: Mapping[str,Any]) -> dict:
+    keys=("signal_key","agency_id","agency","lifecycle","confidence","selection_reason","comparison_basis","source_cadence","current_week_count","baseline_mean","method","z_score","poisson_tail","recent_four_week_mean","prior_baseline_mean","proposal_to_final_ratio","activity_to_final_ratio","prior_month_ratio","current_percentile","history_z_score","alert_basis")
+    return {key:item.get(key) for key in keys if key in item}
+
 def build_brief(payloads: Mapping[str, dict]) -> dict:
     health=payloads.get("health",{})
-    packages=[p for p in payloads.get("packages",{}).get("items",[]) if p.get("confidence") in {"high","medium"} and p.get("notify")]
-    standalone=[p for p in payloads.get("standalone",{}).get("items",[]) if p.get("notify")]
+    packages=[_brief_package(p) for p in payloads.get("packages",{}).get("items",[]) if p.get("confidence") in {"high","medium"} and p.get("notify")]
+    standalone=[_brief_standalone(p) for p in payloads.get("standalone",{}).get("items",[]) if p.get("notify")]
     daily=payloads.get("daily_activity",{}).get("items",[])
     metrics=[]
     for wrapper in payloads.get("fr_metrics",{}).get("items",[]):
-        selected=[item for item in wrapper.get("items",[]) if item.get("notify")]
-        if selected: metrics.append({**wrapper,"items":selected})
+        selected=[_brief_metric(item) for item in wrapper.get("items",[]) if item.get("notify")]
+        if selected: metrics.append({key:wrapper.get(key) for key in ("metric","source","comparison_basis","source_cadence") if key in wrapper}|{"items":selected})
     horizon=[p for p in payloads.get("marc_horizon",{}).get("items",[]) if p.get("confidence") in {"high","medium"} and p.get("notify")]
     sections=[]
     warnings=[{"component":k,"status":v.get("status"),"detail":v.get("detail")} for k,v in health.get("source_freshness",{}).items() if v.get("status") not in {"fresh","running"}]
@@ -172,9 +186,16 @@ def render_text_brief(brief: Mapping[str, Any]) -> str:
         name=section.get("section","").upper().replace("_"," "); lines.append(f"\n{name}:")
         for item in section.get("items",[]):
             if section.get("section")=="daily_activity": lines.append(f"  TODAY: {item.get('total_records',0)} FR records · {item.get('document_type_counts',{})}")
-            elif item.get("label"): lines.append(f"  • {item['label']} — {item.get('confidence','')}; evidence: {len(item.get('evidence',[]))} records")
+            elif section.get("section")=="health": lines.append(f"  • {item.get('component')}: {item.get('status')} — {item.get('detail')}")
+            elif item.get("label"):
+                lines.append(f"  • {item['label']} — {item.get('confidence','')}; {item.get('lifecycle','')}; evidence: {len(item.get('evidence',[]))} records")
+                for evidence in item.get("evidence",[])[:3]: lines.append(f"    - {evidence.get('record_id')} {evidence.get('official_url') or ''}")
+                if len(item.get("evidence",[]))>3: lines.append(f"    - +{len(item['evidence'])-3} more in packages.json")
             elif item.get("title"): lines.append(f"  • {item.get('title')} — {item.get('official_url','')}")
-            else: lines.append(f"  • {item}")
+            elif item.get("metric"):
+                lines.append(f"  {item.get('metric')}:")
+                for metric in item.get("items",[]): lines.append(f"    • {metric.get('agency') or metric.get('agency_id')} — {metric.get('lifecycle','')} — {metric.get('selection_reason','selected')}")
+            else: lines.append(f"  • {item.get('subject') or item.get('signal_key') or 'signal'} — {item.get('selection_reason') or item.get('detail') or ''}")
     return "\n".join(lines)+"\n"
 
 def build_v2_outputs(conn, as_of: str, out_dir: Path, now: dt.datetime | None = None) -> dict[str, dict]:
