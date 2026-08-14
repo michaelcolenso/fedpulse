@@ -53,18 +53,28 @@ def _download(url: str, dest: Path) -> None:
         shutil.copyfileobj(resp, fh)
 
 
-def _delete_from_csv(conn, path: Path) -> int:
-    """Delete records listed in GPO's System Number CSV."""
+def _delete_from_csv(conn, path: Path) -> dict:
+    """Delete records from observed GPO CSV header variants with audit counts."""
     from . import db
-    deleted = 0
+    rows = valid_ids = deleted = not_present = skipped = 0
+    header_name = ""
     with open(path, newline="", encoding="utf-8-sig") as fh:
-        reader = csv.DictReader(fh)
-        for row in reader:
-            sysno = (row.get("System Number") or "").strip()
-            if sysno and sysno.isdigit():
-                db.delete_record(conn, f"marc:{sysno}")
-                deleted += 1
-    return deleted
+        reader = csv.reader(fh)
+        try: header = next(reader)
+        except StopIteration: return {"rows":0,"valid_ids":0,"deleted":0,"not_present":0,"skipped":0,"header":""}
+        normalized = [re.sub(r"[^a-z0-9]", "", h.casefold()) for h in header]
+        candidates = {"sysno", "systemnumber"}
+        index = next((i for i, value in enumerate(normalized) if value in candidates), 0)
+        header_name = header[index].strip() if header else ""
+        for values in reader:
+            rows += 1
+            value = values[index].strip() if index < len(values) else ""
+            if not value or not value.isdigit(): skipped += 1; continue
+            valid_ids += 1
+            cur = conn.execute("select 1 from records where id=?", (f"marc:{value}",)).fetchone()
+            if cur: db.delete_record(conn, f"marc:{value}"); deleted += 1
+            else: not_present += 1
+    return {"rows":rows,"valid_ids":valid_ids,"deleted":deleted,"not_present":not_present,"skipped":skipped,"header":header_name}
 
 
 def _available_months() -> list[str]:
@@ -124,7 +134,7 @@ def sync() -> int:
                 if not dest.exists() or dest.stat().st_size != e.get("size"):
                     _download(e["download_url"], dest)
                 if kind == "deleted" and dest.suffix.lower() == ".csv":
-                    totals["deleted"] += _delete_from_csv(conn, dest)
+                    totals["deleted"] += _delete_from_csv(conn, dest)["deleted"]
                     continue
                 if zipfile.is_zipfile(dest):
                     extract_dir = dest.with_suffix("")
