@@ -59,6 +59,7 @@ uv run python -m compileall -q src tests
 
 - Development and tests must not mutate `data/fedpulse.db` or production output snapshots.
 - Nightly runs use a nonblocking overlap lock and fail loudly on Federal Register/output failures.
+- `.github/workflows/nightly.yml` runs the pipeline on GitHub-hosted runners, which are ephemeral. State survives across runs by round-tripping `data/fedpulse.db` through a Cloudflare R2 bucket (`fedpulse-state`) before/after each run — no pipeline code depends on this; it's pure CI plumbing (see README "Running the nightly pipeline on GitHub Actions"). `scripts/nightly.sh` remains the entry point for a self-hosted cron host with a persistent local disk.
 - MARC failures may produce a degraded run only when visible in health output.
 - Output JSON uses schema version 2 and atomic file replacement.
 - Historical evaluation events, dates, lead requirements, and negative controls are committed before threshold tuning.
