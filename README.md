@@ -255,6 +255,22 @@ uv run python -m compileall -q src tests                          # compile chec
 > [!WARNING]
 > The legacy v0.1 `4/9` backtest framing was misleading (event-date-only checks, post-event matches counted). FedPulse v0.2 replaces it with timing-correct, control-separated evaluation.
 
+### Latest run (2026-08-14, 1.3M-row acceptance clone)
+
+| Metric | Value |
+|---|---|
+| Predictive precision | 0.500 |
+| Predictive recall | 0.714 |
+| Predictive FPR | 0.714 |
+| Median lead time | 450 days |
+
+- **5/7 preregistered predictive events fired early**: SEC climate disclosure (555d), EPA PFAS drinking-water standards (653d), FTC non-compete (450d), SEC money-market reforms (120d), FDA booster era (78d)
+- **2 misses** were genuinely early-warning failures (CFPB late fees, FCC net neutrality)
+- **Horizon controls correctly rejected post-event evidence** — both MARC-horizon misses were discarded because the topic evidence occurred *after* the event date
+- The 0.714 FPR is honest and important: elevated pipeline ratios are **persistent conditions, not one-shot predictions**. FedPulse reports them as supporting context — which is exactly why the product is framed as *monitoring*, not *forecasting*
+
+Full report: [`docs/evaluation/2026-08-14-backtest.md`](docs/evaluation/2026-08-14-backtest.md)
+
 ## Boundaries
 
 FedPulse **does not**:
