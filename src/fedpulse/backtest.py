@@ -1,171 +1,124 @@
-"""Backtest: did the indices fire before known regulatory events?
+"""Offline, pre-registered evaluation of FedPulse signals.
 
-This is the sales deck. For each event in EVENTS, check whether the relevant
-index crossed its threshold in the lookback window before the event date.
-
-Run: PYTHONPATH=src uv run python -m fedpulse.backtest   (needs populated fedpulse.db)
+Predictive evaluation only accepts evidence at least 30 days before the event.
+MARC/TER horizon emergence is reported separately and is not counted as a
+predictive hit.  This module never ingests or mutates a production database.
 """
 from __future__ import annotations
 
+import argparse
 import datetime as dt
+import json
+import statistics
 from pathlib import Path
 
 from . import db, indices
 
-# Known regulatory events + which index should have fired first.
-# agency must match the agency string in the DB (FR child agency names).
-EVENTS = [
-    {
-        "name": "SEC climate disclosure — final rule",
-        "date": "2024-03-06",
-        "index": "rcr",
-        "agency": "Securities and Exchange Commission",
-        "expect": "SEC RCR elevated in 2022-2023 (proposed rule era)",
-    },
-    {
-        "name": "FTC non-compete — final rule",
-        "date": "2024-04-23",
-        "index": "rcr",
-        "agency": "Federal Trade Commission",
-        "expect": "FTC churn spike when proposed Jan 2023",
-    },
-    {
-        "name": "EPA PFAS drinking water standards — final",
-        "date": "2024-04-10",
-        "index": "rcr",
-        "agency": "Environmental Protection Agency",
-        "expect": "EPA proposal Mar 2023 → elevated churn",
-    },
-    {
-        "name": "EPA PFAS Action Plan — policy push",
-        "date": "2019-02-14",
-        "index": "ter",
-        "subject": "Perfluorinated chemicals--Health aspects.",
-        "expect": "TER caught the PFAS health heading emerging Feb 2019 — 5 years before the 2024 final rule",
-    },
-    {
-        "name": "CFPB late fees — final rule",
-        "date": "2024-03-05",
-        "index": "rcr",
-        "agency": "Consumer Financial Protection Bureau",
-        "expect": "CFPB proposal Jan 2023 → elevated churn",
-    },
-    {
-        "name": "SEC money market fund reforms — proposal wave",
-        "date": "2022-02-08",
-        "index": "api",
-        "agency": "Securities and Exchange Commission",
-        "expect": "SEC volume z-score elevated in the 90 days before the proposal",
-    },
-    {
-        "name": "FDA COVID booster era — output mode",
-        "date": "2021-09-01",
-        "index": "api",
-        "agency": "Food and Drug Administration",
-        "expect": "FDA volume spike in the 90 days before Sept 2021",
-    },
-    {
-        "name": "FCC net neutrality reinstatement — final",
-        "date": "2024-04-25",
-        "index": "rcr",
-        "agency": "Federal Communications Commission",
-        "expect": "FCC proposal Oct 2023 → elevated churn",
-    },
-    {
-        "name": "Blockchain policy wave — congressional hearings + SEC guidance",
-        "date": "2018-06-01",
-        "index": "ter",
-        "subject": "Blockchains (Databases)",
-        "expect": "TER caught the blockchain subject heading emerging June 2018",
-    },
-]
+CONFIG = Path(__file__).parent / "config" / "evaluation_events.json"
+EVENTS = json.loads(CONFIG.read_text(encoding="utf-8"))["events"]
+for _event in EVENTS:
+    _event.setdefault("date", _event["event_date"])
 
 
-def _check_rcr(conn, event: dict) -> dict:
-    rcr = indices.compute_rcr(conn, as_of=event["date"])
-    for a in rcr["agencies"]:
-        if a["agency"] == event["agency"]:
-            return {
-                "fired": bool(a["flagged"]),
-                "detail": (f"ratio={a['churn_ratio']} finals={a['final_rules']} "
-                           f"props={a['proposed_rules']} notices={a['notices']}"),
-            }
-    return {"fired": False, "detail": f"agency '{event['agency']}' not in DB at that date"}
+def _date(event: dict) -> dt.date:
+    return dt.date.fromisoformat(event.get("event_date") or event["date"])
+
+
+def _check_rcr(conn, event: dict, *, as_of: dt.date | None = None) -> dict:
+    event_day = as_of or _date(event)
+    cutoff = event_day - dt.timedelta(days=int(event.get("lead_days_required", 30)))
+    start = event_day - dt.timedelta(days=730)
+    candidates = []
+    day = start
+    while day <= cutoff:
+        result = indices.compute_rcr(conn, as_of=day.isoformat())
+        row = next((a for a in result["agencies"] if a["agency"] == event.get("agency")), None)
+        if row and row.get("flagged"):
+            candidates.append((day, row))
+        day += dt.timedelta(days=7)
+    if not candidates:
+        return {"fired": False, "lead_days": None, "evidence_date": None, "detail": f"no RCR flag for {event.get('agency')} at least {event.get('lead_days_required',30)} days before event"}
+    fire_day, row = candidates[-1]
+    return {"fired": True, "lead_days": (event_day - fire_day).days, "evidence_date": fire_day.isoformat(), "detail": f"RCR flag {fire_day}: ratio={row['churn_ratio']} finals={row['final_rules']} props={row['proposed_rules']} notices={row['notices']}"}
 
 
 def _check_api(conn, event: dict) -> dict:
-    ev_date = dt.date.fromisoformat(event["date"])
-    best = None
-    for offset in range(0, 14):  # scan 13 weeks back from event date
-        d = (ev_date - dt.timedelta(weeks=offset)).isoformat()
-        api = indices.compute_api(conn, as_of=d)
-        for a in api["agencies"]:
-            if a["agency"] == event["agency"]:
-                if best is None or (a["flagged"] and not best[0]):
-                    best = (a["flagged"], a["z_score"], a["current_count"], d)
-                break
-    if best is None:
-        return {"fired": False, "detail": f"agency '{event['agency']}' not in DB at that date"}
-    fired, z, cnt, d = best
-    return {"fired": fired, "detail": f"best week {d}: z={z} count={cnt}"}
+    event_day = _date(event); cutoff = event_day - dt.timedelta(days=int(event.get("lead_days_required", 30))); start = event_day - dt.timedelta(days=365)
+    candidates = []
+    day = start
+    while day <= cutoff:
+        result = indices.compute_api(conn, as_of=day.isoformat())
+        row = next((a for a in result["agencies"] if a["agency"] == event.get("agency")), None)
+        if row and row.get("flagged"):
+            candidates.append((day, row))
+        day += dt.timedelta(days=7)
+    if not candidates:
+        return {"fired": False, "lead_days": None, "evidence_date": None, "detail": f"no API flag for {event.get('agency')} at least {event.get('lead_days_required',30)} days before event"}
+    fire_day, row = candidates[-1]
+    return {"fired": True, "lead_days": (event_day - fire_day).days, "evidence_date": fire_day.isoformat(), "detail": f"API flag {fire_day}: z={row['z_score']} count={row['current_count']}"}
 
 
-def _check_ter(conn, event: dict) -> dict:
-    ev_date = dt.date.fromisoformat(event["date"])
-    # emergence window: subject first appeared within ±30 days of the event
-    start = (ev_date - dt.timedelta(days=30)).isoformat()
-    end = (ev_date + dt.timedelta(days=30)).isoformat()
-    needle = event["subject"].lower()
-    cur = conn.execute(
-        """SELECT subject, first_seen_date, first_agency FROM subject_first_seen
-           WHERE lower(subject) = ? AND first_seen_date >= ? AND first_seen_date <= ?""",
-        (needle, start, end),
-    ).fetchone()
-    if cur:
-        return {"fired": True, "detail": f"'{cur['subject']}' first_seen {cur['first_seen_date']} ({cur['first_agency']})"}
-    # fall back: exact subject anywhere in TER output at event date
-    ter = indices.compute_ter(conn, as_of=event["date"])
-    for s in ter["new_subjects"]:
-        if s["subject"].lower() == needle:
-            return {"fired": True, "detail": f"in TER new_subjects: first {s['first_seen']}"}
-    return {"fired": False, "detail": f"subject '{event['subject']}' not found emerging near event"}
+def _check_ter(conn, event: dict, *, predictive: bool = False) -> dict:
+    event_day = _date(event); lead = int(event.get("lead_days_required", 30)) if predictive else 0; cutoff = event_day - dt.timedelta(days=lead)
+    needle = str(event.get("subject", "")).casefold()
+    row = conn.execute("select subject, first_seen_date, first_agency from subject_first_seen where lower(subject)=? order by first_seen_date limit 1", (needle,)).fetchone()
+    if not row:
+        return {"fired": False, "lead_days": None, "evidence_date": None, "detail": f"subject '{event.get('subject')}' not found"}
+    first = dt.date.fromisoformat(row["first_seen_date"])
+    if first > event_day:
+        return {"fired": False, "lead_days": None, "evidence_date": row["first_seen_date"], "detail": "rejected: TER evidence occurs after the event date"}
+    if predictive and first > cutoff:
+        return {"fired": False, "lead_days": (event_day - first).days, "evidence_date": row["first_seen_date"], "detail": f"rejected: TER evidence has only {(event_day-first).days} days of lead; requires {lead}"}
+    return {"fired": True, "lead_days": (event_day - first).days, "evidence_date": row["first_seen_date"], "detail": f"'{row['subject']}' first_seen {row['first_seen_date']} ({row['first_agency']})"}
 
 
 def check(conn, event: dict) -> dict:
-    result = {"event": event["name"], "date": event["date"], "index": event["index"], "fired": False, "detail": ""}
-    idx = event["index"]
-    if idx == "rcr":
-        r = _check_rcr(conn, event)
-    elif idx == "api":
-        r = _check_api(conn, event)
-    elif idx == "ter":
-        r = _check_ter(conn, event)
-    else:
-        r = {"fired": False, "detail": f"unknown index {idx}"}
-    result.update(r)
-    return result
+    event = dict(event); event.setdefault("event_date", event.get("date")); event.setdefault("date", event["event_date"])
+    signal_class = event.get("signal_class", "predictive")
+    if signal_class == "horizon": result = _check_ter(conn, event, predictive=False)
+    elif event.get("index") == "rcr": result = _check_rcr(conn, event)
+    elif event.get("index") == "api": result = _check_api(conn, event)
+    elif event.get("index") == "ter": result = _check_ter(conn, event, predictive=True)
+    else: result = {"fired": False, "lead_days": None, "evidence_date": None, "detail": f"unknown index {event.get('index')}"}
+    return {"event":event["name"],"date":event["event_date"],"index":event.get("index"),"signal_class":signal_class,"lead_days_required":event.get("lead_days_required",30),**result}
+
+
+def _negative_control(conn, event: dict, control: dict) -> dict:
+    probe = dict(event); probe["event_date"] = control["date"]; probe["date"] = control["date"]
+    if event.get("index") == "ter": result = _check_ter(conn, probe, predictive=False)
+    elif event.get("index") == "rcr": result = _check_rcr(conn, probe)
+    else: result = _check_api(conn, probe)
+    return {"name":control.get("name"),"date":control["date"],"fired":bool(result.get("fired")),"detail":result.get("detail","")}
+
+
+def evaluate_events(conn, events: list[dict] | None = None) -> dict:
+    events = events or EVENTS
+    results = [check(conn, event) for event in events]
+    predictive = [r for r in results if r["signal_class"] == "predictive"]
+    horizon = [r for r in results if r["signal_class"] == "horizon"]
+    controls = [_negative_control(conn, event, control) for event in events for control in event.get("negative_controls", [])]
+    tp = sum(r["fired"] for r in predictive); fn = len(predictive) - tp; fp = sum(c["fired"] for c in controls); tn = len(controls) - fp
+    leads = [r["lead_days"] for r in predictive if r["fired"] and r["lead_days"] is not None]
+    return {"predictive":{"events":predictive,"true_positives":tp,"false_negatives":fn,"precision":tp/(tp+fp) if tp+fp else 0.0,"recall":tp/(tp+fn) if tp+fn else 0.0,"false_positive_rate":fp/(fp+tn) if fp+tn else 0.0,"median_lead_days":statistics.median(leads) if leads else None},"horizon":{"events":horizon,"note":"Horizon emergence is descriptive and excluded from predictive precision/recall."},"negative_controls":controls}
+
+
+def render_report(report: dict) -> str:
+    lines = ["# FedPulse v0.2 honest evaluation", "", "Predictive signals require the pre-registered lead window; horizon signals are reported separately.", ""]
+    p = report["predictive"]
+    lines.append(f"Predictive precision={p['precision']:.3f}; recall={p['recall']:.3f}; FPR={p['false_positive_rate']:.3f}; median lead={p['median_lead_days']}")
+    for section in ("predictive", "horizon"):
+        lines.append(f"\n## {section.title()}")
+        for result in report[section]["events"]:
+            lines.append(f"- {'PASS' if result['fired'] else 'MISS'} {result['event']} — lead={result['lead_days']} — {result['detail']}")
+    lines.append("\n## Negative controls")
+    for control in report["negative_controls"]:
+        lines.append(f"- {'FIRED' if control['fired'] else 'quiet'} {control['name']} ({control['date']}) — {control['detail']}")
+    return "\n".join(lines) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
-    conn = db.connect(Path(__file__).resolve().parents[2] / "data" / "fedpulse.db")
-    out = Path(__file__).resolve().parents[2] / "data" / "outputs" / "backtest.md"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    lines = ["# FedPulse Backtest — did the indices fire early?\n", f"Run: {dt.date.today().isoformat()}\n"]
-    passed = 0
-    for ev in EVENTS:
-        r = check(conn, ev)
-        mark = "PASS" if r["fired"] else "MISS"
-        if r["fired"]:
-            passed += 1
-        lines.append(f"## {mark}: {r['event']} ({r['date']})\n- index: {r['index']}\n- {r['detail']}\n- expected: {ev['expect']}\n")
-    lines.append(f"\n**{passed}/{len(EVENTS)} fired**\n")
-    text = "\n".join(lines)
-    out.write_text(text)
-    print(text)
-    conn.close()
-    return 0
-
+    parser = argparse.ArgumentParser(); parser.add_argument("--db", type=Path, default=Path(__file__).resolve().parents[2] / "data" / "fedpulse.db"); parser.add_argument("--out", type=Path, default=Path(__file__).resolve().parents[2] / "data" / "outputs" / "backtest.md")
+    args = parser.parse_args(argv); conn = db.connect(args.db); report = evaluate_events(conn); text = render_report(report); args.out.parent.mkdir(parents=True, exist_ok=True); args.out.write_text(text, encoding="utf-8"); print(text, end=""); conn.close(); return 0
 
 if __name__ == "__main__":
-    import sys
-    sys.exit(main())
+    raise SystemExit(main())

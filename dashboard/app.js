@@ -1,114 +1,60 @@
-/* FedPulse dashboard — reads ../data/outputs/*.json, renders three index panels.
-   Dependency-free vanilla JS. Serve over HTTP (fetch fails on file://).
-   XSS note: all interpolated values pass through esc() before entering innerHTML. */
+/* FedPulse v0.2 evidence-first dashboard. */
 "use strict";
-
-const state = { api: [], rcr: [], terNew: [], terAccel: [], mode: "new" };
-
+const state = { daily: {}, packages: [], standalone: [], metrics: [], marc: [], health: {}, brief: {} };
 const $ = (id) => document.getElementById(id);
-
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
+function esc(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+function safeUrl(value) { const raw = String(value ?? ""); return /^https:\/\//i.test(raw) ? raw : "#"; }
+function text(value, fallback = "—") { return esc(value == null || value === "" ? fallback : value); }
+function evidenceLinks(evidence) {
+  return (evidence || []).map((e) => `<a class="evidence-link" href="${esc(safeUrl(e.official_url))}" target="_blank" rel="noopener noreferrer">${text(e.title || e.record_id)} ↗</a>`).join("");
 }
-
-function spark(series) {
-  if (!series || !series.length) return "";
-  const max = Math.max(...series.map((s) => s.count), 1);
-  const bars = series.map((s) => {
-    const h = Math.max(2, Math.round((s.count / max) * 100));
-    return `<i style="height:${h}%" title="${s.week} · ${s.count}"></i>`;
-  }).join("");
-  return `<div class="spark">${bars}</div>`;
+function packageMatches(p) {
+  const values = [p.canonical_agency_name, p.direction, ...(p.coverage_tags || []).map((x) => x.sector), ...(p.document_type_counts ? Object.keys(p.document_type_counts) : [])].map((x) => String(x || "").toLowerCase());
+  return ["agency-filter", "direction-filter", "sector-filter", "family-filter"].every((id, index) => { const q = ($(id).value || "").trim().toLowerCase(); return !q || values[index === 0 ? 0 : index === 1 ? 1 : index === 2 ? 2 : 3].includes(q); });
 }
-
-function renderApi() {
-  const q = ($("api-filter").value || "").toLowerCase();
-  const items = state.api.filter((a) => !q || a.agency.toLowerCase().includes(q));
-  $("api-count").textContent = items.filter((a) => a.flagged).length;
-  const list = $("api-list");
-  if (!items.length) { list.innerHTML = '<div class="empty">No agencies match.</div>'; return; }
-  list.innerHTML = items.map((a) => `
-    <div class="item ${a.flagged ? "flag" : ""}">
-      <div class="row1">
-        <span class="name">${esc(a.agency)}</span>
-        <span class="val">z ${a.z_score == null ? "—" : a.z_score}</span>
-      </div>
-      <div class="meta">week ${esc(a.current_week || "—")} · ${a.current_count} rec · baseline ${a.baseline_mean}/wk${a.flagged ? " · FLAGGED" : ""}</div>
-      ${spark(a.series)}
-    </div>`).join("");
+function renderFreshness() {
+  const entries = Object.entries(state.health.source_freshness || {});
+  if (!entries.length) { $("freshness").textContent = "No source health snapshot yet."; return; }
+  const bad = entries.filter(([, v]) => !["fresh", "running"].includes(v.status));
+  $("freshness").className = `banner ${bad.length ? "degraded" : "fresh"}`;
+  $("freshness").innerHTML = `<strong>${bad.length ? "Degraded source" : "Sources healthy"}</strong> · ${entries.map(([k, v]) => `${esc(k)}: ${esc(v.status)}${v.last_publication_date ? ` · last FR ${esc(v.last_publication_date)}` : ""}${v.last_cataloged_date ? ` · last MARC ${esc(v.last_cataloged_date)}` : ""}`).join(" · ")}`;
 }
-
-function renderRcr() {
-  const q = ($("rcr-filter").value || "").toLowerCase();
-  const items = state.rcr.filter((a) => !q || a.agency.toLowerCase().includes(q));
-  $("rcr-count").textContent = items.filter((a) => a.flagged).length;
-  const list = $("rcr-list");
-  if (!items.length) { list.innerHTML = '<div class="empty">No agencies match.</div>'; return; }
-  list.innerHTML = items.map((a) => `
-    <div class="item ${a.flagged ? "flag" : ""}">
-      <div class="row1">
-        <span class="name">${esc(a.agency)}</span>
-        <span class="val">${a.churn_ratio == null ? "—" : a.churn_ratio + ":1"}</span>
-      </div>
-      <div class="meta">${a.final_rules} final · ${a.proposed_rules} prop · ${a.notices} notices · ${a.window_start} → ${a.window_end}</div>
-    </div>`).join("");
+function renderDaily() {
+  const d = state.daily;
+  $("daily").innerHTML = `<div class="total-number">${text(d.total_records, "0")}</div><div><div class="muted">Federal Register records on ${text(d.date)}</div><div class="chips">${Object.entries(d.document_type_counts || {}).map(([k,v]) => `<span class="chip">${esc(k)} <b>${text(v,"0")}</b></span>`).join("") || `<span class="muted">No records in the daily snapshot.</span>`}</div></div>`;
 }
-
-function renderTer() {
-  const q = ($("ter-filter").value || "").toLowerCase();
-  const src = state.mode === "new" ? state.terNew : state.terAccel;
-  const items = src.filter((s) => !q || (s.subject || "").toLowerCase().includes(q));
-  $("ter-count").textContent = items.length;
-  const list = $("ter-list");
-  if (!items.length) { list.innerHTML = '<div class="empty">No subjects match.</div>'; return; }
-  list.innerHTML = items.map((s) => {
-    const meta = state.mode === "new"
-      ? `first seen ${esc(s.first_seen || "—")} · ${esc(s.agency || "—")}`
-      : `last 4w ${s.last_4w_count} · prior mean ${s.prior_weekly_mean}/wk · ${s.multiple}x`;
-    return `
-      <div class="item flag">
-        <div class="row1">
-          <span class="name">${esc(s.subject)}</span>
-          <span class="val">${state.mode === "new" ? "NEW" : s.multiple + "×"}</span>
-        </div>
-        <div class="meta">${meta}</div>
-      </div>`;
-  }).join("");
+function renderPackages() {
+  const wantedConfidence = $("confidence-filter").value; const wantedLifecycle = $("lifecycle-filter").value;
+  const items = state.packages.filter((p) => (!wantedConfidence || p.confidence === wantedConfidence) && (!wantedLifecycle || (p.lifecycle || "new") === wantedLifecycle) && packageMatches(p));
+  $("package-count").textContent = String(items.length);
+  $("packages").innerHTML = items.length ? items.map((p) => `<article class="card ${p.confidence === "low" ? "low-confidence" : ""} ${esc(p.confidence || "unknown")}"><div class="card-top"><h3>${text(p.label || p.canonical_agency_name)}</h3><span class="badge ${esc(p.confidence)}">${text(p.confidence)}</span></div><p class="meta">${text(p.date_start)} → ${text(p.date_end)} · ${text(p.direction)} · ${text(p.lifecycle || "new")} · ${text(p.record_count,"0")} records</p><p class="meta">coordination: ${text(p.coordination_agency_id || p.agency_id)} · taxonomy ${esc(JSON.stringify(p.taxonomy_versions || {}))}</p><details><summary>Evidence (${esc((p.evidence || []).length)})</summary><div class="evidence">${evidenceLinks(p.evidence)}<p class="meta">${(p.confidence_reasons || []).map(text).join(" · ")}</p></div></details></article>`).join("") : `<div class="empty">No packages match these filters.</div>`;
 }
-
+function renderStandalone() {
+  $("standalone-count").textContent = String(state.standalone.length);
+  $("standalone").innerHTML = state.standalone.length ? state.standalone.map((s) => `<article class="card"><div class="card-top"><h3>${text(s.canonical_agency_name || s.raw_agency_name)}</h3><span class="badge watch">watchlist</span></div><p>${text(s.title)}</p><p class="meta">${text(s.doc_type)} · ${text(s.publication_date)} · ${text(s.lifecycle || "new")}</p><p class="meta">${(s.matches || []).map((m) => `${esc(m.watchlist)}: ${esc(m.rule)}`).join(" · ")}</p><details><summary>Record evidence</summary><div class="evidence">${evidenceLinks([{official_url:s.official_url,title:s.title,record_id:s.record_id}])}</div></details></article>`).join("") : `<div class="empty">No standalone watchlist matches.</div>`;
+}
+function renderMetrics() {
+  const wrappers = state.metrics;
+  $("fr-metrics").innerHTML = wrappers.length ? wrappers.map((m) => { const body = (m.items || []).slice(0, 80).map((x) => `<div class="metric-row ${x.alert ? "flag" : ""}"><span>${text(x.agency || x.agency_id || x.signal_type || m.metric)}</span><strong>${x.z_score != null ? `z ${text(x.z_score)}` : x.proposal_to_final_ratio != null ? `ratio ${text(x.proposal_to_final_ratio)}` : x.recent_weekly_rate != null ? `rate ${text(x.recent_weekly_rate)}` : x.alert ? "alert" : "—"}</strong><span class="meta">${x.alert ? "alert" : "supporting metric"} · ${text(x.statistical_evidence || x.alert_basis || "per-agency")}</span></div>`).join(""); return `<article class="card"><div class="card-top"><h3>${text(m.metric)}</h3><span class="badge metric">${m.alert ? "alert" : "support"}</span></div><p class="meta">${text(m.as_of)} · ${text(m.as_of_timezone)}</p>${body || `<p class="muted">No per-agency rows.</p>`}</article>`; }).join("") : `<div class="empty">No FR metrics snapshot.</div>`;
+}
+function renderMarc() {
+  $("marc").innerHTML = state.marc.length ? state.marc.map((m) => `<article class="card ${m.confidence === "insufficient_sample" || m.confidence === "catalog_batch_risk" ? "low-confidence" : ""}"><div class="card-top"><h3>${text(m.subject)}</h3><span class="badge ${esc(m.confidence)}">${text(m.confidence)}</span></div><p class="meta">${text(m.last_four_week_catalog_count,"0")} cataloged · ${text(m.distinct_cataloged_dates,"0")} dates · ${text(m.distinct_canonical_agencies,"0")} agencies · ${text(m.first_seen_label)}</p><details><summary>Catalog evidence (${esc((m.evidence || []).length)})</summary><div class="evidence">${evidenceLinks((m.evidence || []).slice(0, 20))}</div></details></article>`).join("") : `<div class="empty">No MARC horizon snapshot.</div>`;
+}
 async function load() {
   try {
-    const [api, rcr, ter, summary] = await Promise.all([
-      fetch("../data/outputs/api.json").then((r) => r.json()),
-      fetch("../data/outputs/rcr.json").then((r) => r.json()),
-      fetch("../data/outputs/ter.json").then((r) => r.json()),
-      fetch("../data/outputs/summary.json").then((r) => r.json()),
+    const [daily, packages, standalone, frMetrics, marc, health, brief] = await Promise.all([
+      fetch("../data/outputs/daily_activity.json").then((r) => r.json()),
+      fetch("../data/outputs/packages.json").then((r) => r.json()),
+      fetch("../data/outputs/standalone.json").then((r) => r.json()),
+      fetch("../data/outputs/fr_metrics.json").then((r) => r.json()),
+      fetch("../data/outputs/marc_horizon.json").then((r) => r.json()),
+      fetch("../data/outputs/health.json").then((r) => r.json()),
+      fetch("../data/outputs/brief.json").then((r) => r.json()),
     ]);
-    state.api = api.agencies || [];
-    state.rcr = rcr.agencies || [];
-    state.terNew = ter.new_subjects || [];
-    state.terAccel = ter.accelerating_subjects || [];
-    $("asof").textContent = "as of " + (api.as_of || "—");
-    $("status").textContent = `loaded · ${state.api.length} agencies · ${state.rcr.length} churn rows · ${state.terNew.length} new subjects · ${state.terAccel.length} accelerating`;
-  } catch (e) {
-    $("status").textContent = "no index data yet — first ingest pending";
-  }
-  renderApi(); renderRcr(); renderTer();
+    state.daily = (daily.items || [])[0] || {}; state.packages = packages.items || []; state.standalone = standalone.items || []; state.metrics = frMetrics.items || []; state.marc = marc.items || []; state.health = health; state.brief = brief;
+    $("asof").textContent = `as of ${text(health.as_of || brief.as_of)}`; $("status").textContent = `loaded schema-v2 · ${esc(state.packages.length)} packages · ${esc(state.standalone.length)} standalone · ${esc(state.marc.length)} MARC topics`;
+  } catch (error) { $("status").textContent = `schema-v2 output unavailable: ${esc(error.message)}`; }
+  renderFreshness(); renderDaily(); renderPackages(); renderStandalone(); renderMetrics(); renderMarc();
 }
-
-["api-filter", "rcr-filter", "ter-filter"].forEach((id) =>
-  $(id).addEventListener("input", () =>
-    (id === "api-filter" ? renderApi() : id === "rcr-filter" ? renderRcr() : renderTer())
-  )
-);
-document.getElementById("ter-seg").addEventListener("click", (e) => {
-  const btn = e.target.closest("button");
-  if (!btn) return;
-  state.mode = btn.dataset.mode;
-  document.querySelectorAll("#ter-seg button").forEach((b) => b.classList.toggle("active", b === btn));
-  renderTer();
-});
-
+["agency-filter", "direction-filter", "sector-filter", "family-filter", "confidence-filter", "lifecycle-filter"].forEach((id) => $(id).addEventListener("input", renderPackages));
 load();
