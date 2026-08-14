@@ -1,0 +1,75 @@
+name: FedPulse nightly pipeline
+
+on:
+  schedule:
+    # 11:17 UTC ≈ 6:17/7:17am America/New_York depending on DST — after the
+    # Federal Register's overnight publication run.
+    - cron: "17 11 * * *"
+  workflow_dispatch: {}
+
+# Never let two runs touch the same state.db concurrently.
+concurrency:
+  group: fedpulse-nightly
+  cancel-in-progress: false
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.FEDPULSE_R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.FEDPULSE_R2_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: auto
+  R2_ENDPOINT: https://4e921a01da1f55b0ddb32bb38a5524ce.r2.cloudflarestorage.com
+  R2_BUCKET: fedpulse-state
+  R2_DB_KEY: fedpulse.db
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Restore state.db from R2
+        run: |
+          mkdir -p data
+          aws s3 cp "s3://${R2_BUCKET}/${R2_DB_KEY}" data/fedpulse.db \
+            --endpoint-url "$R2_ENDPOINT" \
+            || echo "No prior state object in R2 — starting a fresh database."
+
+      - name: Run nightly pipeline
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 \
+            --db data/fedpulse.db --out data/outputs
+
+      - name: Persist state.db back to R2
+        if: always()
+        run: |
+          if [ -f data/fedpulse.db ]; then
+            aws s3 cp data/fedpulse.db "s3://${R2_BUCKET}/${R2_DB_KEY}" \
+              --endpoint-url "$R2_ENDPOINT"
+          fi
+
+      - name: Dereference output symlinks for upload
+        # publish_snapshot() in outputs_v2.py activates each generation via a
+        # symlinked `current/` pointer; upload-artifact does not resolve
+        # symlinks, so copy through them into plain files first.
+        if: always()
+        run: |
+          if [ -d data/outputs ]; then
+            cp -rL data/outputs data/outputs-flat
+          fi
+
+      - name: Upload output snapshot (debug artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fedpulse-outputs-${{ github.run_id }}
+          path: data/outputs-flat
+          retention-days: 14
+          if-no-files-found: warn
