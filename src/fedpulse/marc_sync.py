@@ -43,8 +43,15 @@ SETS = {
 MONTH_RE = re.compile(r"(\d{4})(\d{2})")
 
 
+def _api_headers() -> dict[str, str]:
+    # api.github.com is rate-limited to 60 req/hr per IP when unauthenticated;
+    # CI runners share IPs, so ride the GITHUB_TOKEN Actions already provides.
+    token = os.environ.get("GITHUB_TOKEN")
+    return {**UA, "Authorization": f"Bearer {token}"} if token else dict(UA)
+
+
 def _get_json(url: str) -> list[dict]:
-    req = urllib.request.Request(url, headers=UA)
+    req = urllib.request.Request(url, headers=_api_headers())
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
