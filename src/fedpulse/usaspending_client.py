@@ -3,13 +3,17 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import urllib.error
 import urllib.request
 
 from .action_graph import GovernmentEvent
 
 BASE = "https://api.usaspending.gov/api/v2"
 USER_AGENT = "FedPulse/0.4 (public federal government monitoring)"
-AWARD_TYPE_CODES = ["A", "B", "C", "D", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"]
+AWARD_TYPE_CODES = [
+    "A", "B", "C", "D", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11",
+    "IDV_A", "IDV_B", "IDV_B_A", "IDV_B_B", "IDV_B_C", "IDV_C", "IDV_D", "IDV_E",
+]
 
 
 def post_json(path: str, payload: dict, timeout: int = 90) -> dict:
@@ -18,12 +22,16 @@ def post_json(path: str, payload: dict, timeout: int = 90) -> dict:
         f"{BASE}{path}", data=body, method="POST",
         headers={"User-Agent": USER_AGENT, "Content-Type": "application/json", "Accept": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:1000]
+        raise RuntimeError(f"USAspending HTTP {exc.code}: {detail}") from exc
 
 
 def normalize_award(row: dict) -> GovernmentEvent | None:
-    award_id = row.get("generated_subaward_id") or row.get("generated_unique_award_id") or row.get("Award ID") or row.get("Award ID")
+    award_id = row.get("generated_subaward_id") or row.get("generated_unique_award_id") or row.get("Award ID")
     if not award_id: return None
     title = row.get("Description") or row.get("description") or row.get("Recipient Name") or "Federal award"
     agency = row.get("Awarding Agency") or row.get("awarding_agency_name")
@@ -34,7 +42,7 @@ def normalize_award(row: dict) -> GovernmentEvent | None:
     cfda = row.get("CFDA Number") or row.get("cfda_number")
     piid = row.get("Award ID") or row.get("piid")
     identifiers = [("award", str(award_id))]
-    if piid: identifiers.append(("award", str(piid)))
+    if piid and str(piid) != str(award_id): identifiers.append(("award", str(piid)))
     if cfda: identifiers.append(("assistance_listing", str(cfda)))
     url = f"https://www.usaspending.gov/award/{award_id}/"
     return GovernmentEvent(
@@ -47,7 +55,10 @@ def normalize_award(row: dict) -> GovernmentEvent | None:
 def pull_recent_awards(days: int = 3, *, today: dt.date | None = None, page_limit: int = 25) -> list[GovernmentEvent]:
     today = today or dt.date.today()
     start = today - dt.timedelta(days=max(days, 1) - 1)
-    fields = ["Award ID", "Recipient Name", "Award Amount", "Awarding Agency", "Start Date", "Description", "CFDA Number"]
+    # Keep fields to the current cross-award result contract. Assistance Listing/CFDA
+    # is not a valid spending_by_award result field for every award family; enrich it
+    # later from award details rather than making baseline ingestion fail.
+    fields = ["Award ID", "Recipient Name", "Award Amount", "Awarding Agency", "Start Date", "Description", "Award Type"]
     out = []
     page = 1
     while page <= page_limit:
@@ -59,6 +70,8 @@ def pull_recent_awards(days: int = 3, *, today: dt.date | None = None, page_limi
             "fields": fields,
             "page": page,
             "limit": 100,
+            "sort": "Award Amount",
+            "order": "desc",
             "subawards": False,
         }
         data = post_json("/search/spending_by_award/", payload)
