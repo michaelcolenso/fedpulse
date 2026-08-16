@@ -6,11 +6,11 @@ import json, os, tempfile
 from collections import defaultdict
 from pathlib import Path
 
-from .opportunities import _date, _haystack, _payload, load_profile, load_profiles, score_event
+from .opportunities import _date, _geo_haystack, _haystack, _payload, _term_match, load_profile, load_profiles, score_event
 
 
 def _geo_hits(haystack: str, profile: dict) -> list[str]:
-    return sorted({g for g in profile.get("geographies", []) if g.lower() in haystack})
+    return sorted({g for g in profile.get("geographies", []) if _term_match(g,haystack)})
 
 
 def _all_identifiers(conn):
@@ -23,13 +23,7 @@ def _all_identifiers(conn):
 def _history_stats(agency,naics,geo,event_date,agency_naics,agency_naics_geo,agency_dates):
     dates=agency_dates.get(agency,[]); ordinal=event_date.toordinal()
     recent=bisect.bisect_left(dates,ordinal-30); prior_start=bisect.bisect_left(dates,ordinal-180)
-    return {
-        "agency_naics_prior":agency_naics.get((agency,naics),0) if naics else 0,
-        "agency_naics_geo_prior":agency_naics_geo.get((agency,naics,geo),0) if naics and geo else 0,
-        "agency_recent_30d":len(dates)-recent,
-        "agency_prior_150d":recent-prior_start,
-        "geo":geo,"naics":naics,
-    }
+    return {"agency_naics_prior":agency_naics.get((agency,naics),0) if naics else 0,"agency_naics_geo_prior":agency_naics_geo.get((agency,naics,geo),0) if naics and geo else 0,"agency_recent_30d":len(dates)-recent,"agency_prior_150d":recent-prior_start,"geo":geo,"naics":naics}
 
 
 def _build_gem(base,row,stats):
@@ -55,7 +49,7 @@ def detect_hidden_gems(conn,as_of: str,profile_name: str="default",limit: int=20
     for row in rows:
         event_date=_date(row["event_date"])
         if not event_date: continue
-        ids=ids_by_event.get(row["event_id"],{}); naics=(ids.get("naics") or [None])[0]; agency=(row["agency"] or "").strip().lower(); haystack=_haystack(row,_payload(row)); geos=_geo_hits(haystack,profile); geo=geos[0].lower() if geos else None
+        ids=ids_by_event.get(row["event_id"],{}); naics=(ids.get("naics") or [None])[0]; agency=(row["agency"] or "").strip().lower(); payload=_payload(row); geos=_geo_hits(_geo_haystack(row,payload),profile); geo=geos[0].lower() if geos else None
         stats=_history_stats(agency,naics,geo,event_date,agency_naics,agency_naics_geo,agency_dates)
         age=(day-event_date).days
         if 0<=age<=lookback:
