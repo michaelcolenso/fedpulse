@@ -7,7 +7,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-REQUIRED_TABLES = {"records", "signal_state", "package_versions", "source_health"}
+REQUIRED_TABLES = {"records", "signal_state", "package_versions", "pipeline_state"}
 
 
 def inspect(path: Path) -> dict[str, object]:
