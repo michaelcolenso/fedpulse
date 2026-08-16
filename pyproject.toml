@@ -1,7 +1,7 @@
 [project]
 name = "fedpulse"
-version = "0.1.0"
-description = "Regulatory intelligence from GPO MARC + Federal Register metadata. Pure counts, no NLP."
+version = "0.3.0"
+description = "Evidence-ranked federal regulatory monitoring from Federal Register and GPO metadata."
 requires-python = ">=3.11"
 dependencies = []
 
