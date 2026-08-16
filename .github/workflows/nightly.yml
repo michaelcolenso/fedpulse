@@ -1,10 +1,6 @@
 name: FedPulse nightly pipeline
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/nightly.yml'
   schedule:
     - cron: "17 11 * * *"
   workflow_dispatch: {}
