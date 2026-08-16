@@ -38,35 +38,59 @@ jobs:
   live-source-smoke:
     if: github.event_name == 'pull_request' && github.head_ref == 'agent/live-source-smoke'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [oira_meetings, grants, usaspending, sam, bill_status]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - name: Exercise all zero-key sources against live government data
+      - name: Exercise ${{ matrix.source }} against live government data
+        env:
+          SOURCE: ${{ matrix.source }}
         run: |
           PYTHONPATH=src uv run python - <<'PY'
-          import json, sqlite3, tempfile
-          from pathlib import Path
-          from fedpulse import db, keyless_sources
+          import json, os
+          from fedpulse import congress_bulk_client, grants_client, oira_meetings_client, reginfo_client, sam_opportunities_client, usaspending_client
 
-          root = Path(tempfile.mkdtemp(prefix='fedpulse-live-'))
-          conn = db.connect(root / 'live.db')
-          db.init_db(conn)
-          results = keyless_sources.sync_all(conn, include_bulk=True, oira_meeting_rin_limit=20, congress_file_limit=50)
-          print('LIVE_RESULTS=' + json.dumps(results, sort_keys=True))
-
-          counts = {row['source']: row['n'] for row in conn.execute(
-              'select source, count(*) n from government_events group by source order by source'
-          )}
-          print('EVENT_COUNTS=' + json.dumps(counts, sort_keys=True))
-          print('EDGE_COUNT=' + str(conn.execute('select count(*) from government_edges').fetchone()[0]))
-          for row in conn.execute(
-              "select source,stage,title,event_date,amount from government_events order by coalesce(event_date,'') desc limit 30"
-          ):
-              print('SAMPLE=' + json.dumps(dict(row), sort_keys=True, default=str))
-          failed = [k for k,v in results.items() if v.get('status') == 'failure']
-          if failed:
-              raise SystemExit('live source failures: ' + ','.join(failed))
+          source = os.environ['SOURCE']
+          if source == 'oira_meetings':
+              docs = reginfo_client.pull_oira_pending() + reginfo_client.pull_oira_completed_30()
+              rins = list(dict.fromkeys(d.rin for d in docs if d.rin))[:25]
+              found = []
+              checked = []
+              for rin in rins:
+                  checked.append(rin)
+                  events = oira_meetings_client.pull_for_rin(rin)
+                  if events:
+                      found.extend(events)
+                      break
+              print('OIRA_REVIEW_RECORDS=' + str(len(docs)))
+              print('OIRA_RINS_CHECKED=' + json.dumps(checked))
+              print('OIRA_MEETINGS=' + str(len(found)))
+              for e in found[:5]: print('SAMPLE=' + json.dumps(e.__dict__, default=str, sort_keys=True))
+              if not docs: raise SystemExit('RegInfo returned zero OIRA review records')
+          elif source == 'grants':
+              url, digest, events = grants_client.pull_latest()
+              print('SOURCE_URL=' + url); print('SHA256=' + digest); print('EVENTS=' + str(len(events)))
+              for e in events[:5]: print('SAMPLE=' + json.dumps(e.__dict__, default=str, sort_keys=True))
+              if not events: raise SystemExit('Grants.gov returned zero opportunities')
+          elif source == 'usaspending':
+              events = usaspending_client.pull_recent_awards(days=3)
+              print('EVENTS=' + str(len(events)))
+              for e in events[:5]: print('SAMPLE=' + json.dumps(e.__dict__, default=str, sort_keys=True))
+              if not events: raise SystemExit('USAspending returned zero recent awards')
+          elif source == 'sam':
+              url, digest, events = sam_opportunities_client.pull_current()
+              print('SOURCE_URL=' + url); print('SHA256=' + digest); print('EVENTS=' + str(len(events)))
+              for e in events[:5]: print('SAMPLE=' + json.dumps(e.__dict__, default=str, sort_keys=True))
+              if not events: raise SystemExit('SAM.gov returned zero opportunities')
+          elif source == 'bill_status':
+              events = congress_bulk_client.pull_recent_updates(max_files=25)
+              print('EVENTS=' + str(len(events)))
+              for e in events[:5]: print('SAMPLE=' + json.dumps(e.__dict__, default=str, sort_keys=True))
+              if not events: raise SystemExit('Bill Status returned zero recent updates')
           PY
 
   deploy:
