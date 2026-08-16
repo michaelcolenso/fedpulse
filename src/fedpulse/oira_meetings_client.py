@@ -5,6 +5,7 @@ so FedPulse queries the official public meeting search for RINs it already track
 """
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import html
 import re
@@ -50,8 +51,18 @@ def _field(text: str, label: str, next_labels: tuple[str, ...]) -> str | None:
     return re.sub(r"\s+", " ", m.group(1)).strip(" -\n\t") or None
 
 
+def _iso_meeting_date(value: str | None) -> str | None:
+    if not value: return None
+    for fmt in ("%m/%d/%Y %I:%M %p", "%m/%d/%Y"):
+        try:
+            parsed = dt.datetime.strptime(value.strip(), fmt)
+            return parsed.isoformat(timespec="minutes") if "%I" in fmt else parsed.date().isoformat()
+        except ValueError:
+            continue
+    return value
+
+
 def parse_detail(page: str, url: str) -> GovernmentEvent | None:
-    # Strip tags while preserving enough label text for deterministic extraction.
     text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", page, flags=re.I | re.S)
     text = html.unescape(re.sub(r"<[^>]+>", " ", text))
     text = re.sub(r"\s+", " ", text)
@@ -62,9 +73,10 @@ def parse_detail(page: str, url: str) -> GovernmentEvent | None:
     title = _field(text, "Title", ("Agency/Subagency", "Stage of Rulemaking", "Meeting Date/Time"))
     agency = _field(text, "Agency/Subagency", ("Stage of Rulemaking", "Meeting Date/Time"))
     stage = _field(text, "Stage of Rulemaking", ("Meeting Date/Time", "Requestor"))
-    date = _field(text, "Meeting Date/Time", ("Requestor", "Documents", "Attendees"))
+    raw_date = _field(text, "Meeting Date/Time", ("Requestor", "Documents", "Attendees"))
+    date = _iso_meeting_date(raw_date)
     requestor = _field(text, "Requestor", ("Requestor's Name", "Documents", "Attendees"))
-    payload = {"rin": rin, "meeting_id": meeting_id, "stage": stage, "requestor": requestor, "source_sha256": hashlib.sha256(page.encode()).hexdigest()}
+    payload = {"rin": rin, "meeting_id": meeting_id, "stage": stage, "requestor": requestor, "meeting_date_raw": raw_date, "source_sha256": hashlib.sha256(page.encode()).hexdigest()}
     return GovernmentEvent(
         source="oira_meeting", source_id=meeting_id, kind="stakeholder_meeting", stage=stage,
         title=title, agency=agency, event_date=date, official_url=url,
