@@ -1,4 +1,4 @@
--- FedPulse SQLite schema. v0.2 is additive and idempotent.
+-- FedPulse SQLite schema. v0.4 remains additive and idempotent.
 PRAGMA journal_mode = WAL;
 
 CREATE TABLE IF NOT EXISTS records (
@@ -55,4 +55,58 @@ CREATE INDEX IF NOT EXISTS idx_package_version_records_record ON package_version
 CREATE TABLE IF NOT EXISTS pipeline_state (
     component TEXT PRIMARY KEY, last_attempt TEXT, last_success TEXT,
     status TEXT NOT NULL, detail TEXT
+);
+
+-- v0.4 government-action graph. New source families live here rather than being
+-- forced into the regulatory records table above.
+CREATE TABLE IF NOT EXISTS government_events (
+    event_id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    stage TEXT,
+    title TEXT,
+    agency TEXT,
+    event_date TEXT,
+    amount REAL,
+    currency TEXT,
+    official_url TEXT,
+    payload_json TEXT NOT NULL,
+    content_sha256 TEXT,
+    first_seen TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(source, source_id)
+);
+CREATE INDEX IF NOT EXISTS idx_government_events_source_date ON government_events(source, event_date);
+CREATE INDEX IF NOT EXISTS idx_government_events_kind_date ON government_events(kind, event_date);
+CREATE INDEX IF NOT EXISTS idx_government_events_agency ON government_events(agency);
+
+CREATE TABLE IF NOT EXISTS government_identifiers (
+    event_id TEXT NOT NULL,
+    namespace TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (event_id, namespace, value),
+    FOREIGN KEY (event_id) REFERENCES government_events(event_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_government_identifiers_lookup ON government_identifiers(namespace, value);
+
+CREATE TABLE IF NOT EXISTS government_edges (
+    from_event_id TEXT NOT NULL,
+    to_event_id TEXT NOT NULL,
+    relationship TEXT NOT NULL,
+    method TEXT NOT NULL,
+    confidence TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (from_event_id, to_event_id, relationship),
+    FOREIGN KEY (from_event_id) REFERENCES government_events(event_id) ON DELETE CASCADE,
+    FOREIGN KEY (to_event_id) REFERENCES government_events(event_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_government_edges_to ON government_edges(to_event_id);
+
+CREATE TABLE IF NOT EXISTS source_cursors (
+    source TEXT PRIMARY KEY,
+    cursor TEXT,
+    content_sha256 TEXT,
+    last_success TEXT,
+    detail TEXT
 );

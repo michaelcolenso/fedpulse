@@ -59,14 +59,12 @@ def _candidate_records(root: ET.Element) -> list[ET.Element]:
         title = _text(node, "TITLE", "RuleTitle")
         if rin and title:
             rows.append(node)
-    # Keep only the shallowest matching nodes; nested matches otherwise duplicate records.
     unique: list[ET.Element] = []
     seen = set()
     for node in rows:
         key = (_text(node, "RIN"), _text(node, "TITLE", "RuleTitle"), _text(node, "RECEIVED_DATE", "ReceivedDate"))
         if key not in seen:
-            seen.add(key)
-            unique.append(node)
+            seen.add(key); unique.append(node)
     return unique
 
 
@@ -83,12 +81,12 @@ def parse_oira(xml_bytes: bytes, *, source: str, source_url: str) -> list[RegInf
             source_url=source_url,
             rin=_text(node, "RIN"),
             title=_text(node, "TITLE", "RuleTitle"),
-            agency=_text(node, "AGENCY", "AgencyName", "Agency"),
-            stage=_text(node, "STAGE", "Stage"),
-            status=_text(node, "STATUS", "Status", "ConcludedAction"),
+            agency=_text(node, "AGENCY", "AgencyName", "Agency", "Department"),
+            stage=_text(node, "STAGE", "Stage", "RuleStage", "AgendaStageOfRulemaking"),
+            status=_text(node, "STATUS", "Status", "ConcludedAction", "TimetableAction"),
             received_date=_text(node, "RECEIVED_DATE", "ReceivedDate"),
             concluded_date=_text(node, "CONCLUDED_DATE", "ConcludedDate"),
-            publication_date=_text(node, "PUBLICATION_DATE", "PublicationDate"),
+            publication_date=_text(node, "PUBLICATION_DATE", "PublicationDate", "FRPublicationDate"),
             raw_sha256=digest,
         ))
     return out
@@ -102,3 +100,8 @@ def pull_oira_pending() -> list[RegInfoDocument]:
 def pull_oira_completed_30() -> list[RegInfoDocument]:
     body = fetch_xml(OIRA_COMPLETED_30_URL)
     return parse_oira(body, source="oira_completed_30", source_url=OIRA_COMPLETED_30_URL)
+
+
+def pull_unified_agenda() -> list[RegInfoDocument]:
+    body = fetch_xml(UNIFIED_AGENDA_2026_URL, timeout=180)
+    return parse_oira(body, source="unified_agenda", source_url=UNIFIED_AGENDA_2026_URL)
