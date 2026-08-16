@@ -1,330 +1,79 @@
-<div align="center">
+# FedPulse
 
-# 🇺🇸 FedPulse
+Evidence-ranked federal regulatory monitoring from Federal Register and GPO metadata.
 
-### The evidence-ranked federal regulatory watchlist
+FedPulse is deterministic, stdlib-only at runtime, and designed around auditable evidence rather than generated summaries. It turns official publication metadata into daily signals, coordinated action packages, source-health snapshots, and dashboard-ready JSON.
 
-**What changed. Why it's noteworthy. Who's affected. Which official records prove it.**
+## v0.3 production-trust release
 
-[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Dependencies](https://img.shields.io/badge/Runtime%20deps-Stdlib%20only-0B7285?logo=python&logoColor=white)]()
-[![SQLite](https://img.shields.io/badge/Storage-SQLite-003B57?logo=sqlite&logoColor=white)]()
-[![Tests](https://img.shields.io/badge/tests-78%2F78%20passing-1a7f37)]()
-[![No LLMs](https://img.shields.io/badge/No%20generative%20NLP-%E2%9C%93-6f42c1)]()
-[![Deterministic](https://img.shields.io/badge/Deterministic-%E2%9C%93-1a7f37)]()
+This release hardens the production boundary around the existing evidence engine:
 
-**FedPulse turns 1.3 million public-domain government records into a ranked, auditable daily watchlist** — coherent regulatory packages, consequential standalone actions, and honest per-agency metrics — every conclusion backed by exact source records.
+- R2 state restore fails closed instead of treating every error as an empty bootstrap.
+- SQLite state is validated before it can replace persisted production state.
+- State backups are retained before replacement.
+- Dashboard data is published into immutable generation-scoped KV objects.
+- A single `current.json` pointer is written last, so readers get one coherent generation.
+- The Worker and Wrangler configuration live in the repo.
+- CI validates tests, Python compilation, JSON config, dashboard JavaScript, Worker JavaScript, and shell syntax.
+- The dashboard is organized around decision-ready evidence signals instead of raw classifier diagnostics.
 
-</div>
+## Outputs
 
----
+Every successful run publishes seven schema-v2 JSON outputs:
 
-## 📖 Table of contents
+- `daily_activity.json`
+- `packages.json`
+- `standalone.json`
+- `fr_metrics.json`
+- `marc_horizon.json`
+- `health.json`
+- `brief.json`
 
-- [Why FedPulse exists](#why-fedpulse-exists)
-- [Live dashboard](#live-dashboard)
-- [How it works](#how-it-works)
-- [What you get: the evidence-first outputs](#what-you-get-the-evidence-first-outputs)
-- [Real output, real data](#real-output-real-data)
-- [Honest statistics by design](#honest-statistics-by-design)
-- [Package lifecycle](#package-lifecycle)
-- [Quick start](#quick-start)
-- [Configuration](#configuration)
-- [Operational behavior](#operational-behavior)
-- [Development & testing](#development--testing)
-- [Honest evaluation](#honest-evaluation)
-- [Boundaries](#boundaries)
-- [Data provenance](#data-provenance)
+The Cloudflare publisher also writes immutable generation-scoped keys and advances `current.json` only after all files have been uploaded.
 
----
+## Dashboard
 
-## Why FedPulse exists
+The dashboard is dependency-free vanilla JavaScript. It fetches schema-v2 output through the Cloudflare Worker, verifies generation consistency across all payloads, and shows:
 
-Regulatory monitoring is drowning in noise. Every day the **Federal Register** publishes hundreds of documents, and the **GPO MARC catalog** quietly adds thousands of records. Compliance and government-affairs teams need to know:
+1. signals worth watching;
+2. today's Federal Register pulse;
+3. agencies outside baseline;
+4. coordinated evidence packages;
+5. standalone watchlist hits;
+6. emerging GPO topics;
+7. methodology and diagnostic metrics.
 
-> **What changed, why is it noteworthy, who may be affected, and which official records support that conclusion?**
-
-FedPulse answers that question with **deterministic rules over structured metadata** — no generative NLP, no embeddings, no runtime LLMs, no analyst-in-the-loop. If the same data is fed in, the same answer comes out. Every conclusion ships with the exact record IDs, URLs, matched values, and taxonomy versions that produced it.
-
-> [!IMPORTANT]
-> FedPulse is a **monitoring and prioritization engine**, not a prediction engine. It finds and explains what is happening now — it does not claim to forecast markets or legal outcomes.
-
-## Live dashboard
-
-The dashboard is **dependency-free vanilla JavaScript** — no frameworks, no build step, no CDN.
-
-<p align="center">
-  <img src="docs/images/dashboard-hero.png" alt="FedPulse v0.2 dashboard — daily activity and coordinated packages" width="640">
-</p>
-
-<p align="center">
-  <img src="docs/images/dashboard-packages.png" alt="FedPulse v0.2 dashboard — evidence cards" width="640">
-</p>
-
-The dashboard reads **one atomic generation** of seven schema-v2 JSON files through a symlinked `current/` pointer — readers can never observe a half-written day.
-
-## How it works
-
-<img src="docs/images/architecture.svg" alt="FedPulse v0.2 architecture" width="720">
-
-### Two sources, two clocks
-
-FedPulse deliberately keeps its two government feeds **statistically separate** — mixing them was a v0.1 design flaw:
-
-| Source | Cadence | Clock field | Used for |
-|---|---|---|---|
-| **Federal Register API** | Daily | `publication_date` | Daily activity, packages, standalone actions, weekly metrics, pipeline ratios |
-| **GPO MARC maintenance** | Monthly | `cataloged_date` | Government Topic Horizon (slower emergence signal) |
-
-> [!NOTE]
-> MARC is a **periodic cataloging feed, not a daily regulatory feed**. FedPulse never combines FR and MARC volume into one anomaly series.
-
-### Pipeline
-
-```mermaid
-flowchart LR
-    A[Federal Register API<br/>daily] --> B[Ingest + validate]
-    C[GPO MARC monthly deltas<br/>new / changed / deleted] --> D[Ingest + safe extract]
-    B --> E[(SQLite WAL)]
-    D --> E
-    E --> F[Normalize<br/>exact versioned aliases]
-    F --> G{Evidence engine}
-    G --> H[Coherent packages]
-    G --> I[Standalone watchlist]
-    G --> J[FR metrics<br/>complete ET weeks]
-    G --> K[MARC horizon]
-    H --> L[Lifecycle state]
-    I --> L
-    J --> L
-    K --> L
-    L --> M[Atomic snapshot<br/>7 schema-v2 JSON files]
-    M --> N[Dashboard]
-    M --> O[Daily brief]
-```
-
-### Package detection — the hard part
-
-Detecting a *coherent regulatory action* scattered across multiple Federal Register documents is the core of FedPulse:
-
-```mermaid
-flowchart TD
-    A[Candidate FR records<br/>same agency family] --> B{Coherent evidence?}
-    B -->|Exact shared topic<br/>OR direction + sector| C{Bounded span?}
-    B -->|Count alone| X[✗ Rejected —<br/>same-day count is never enough]
-    C -->|≤ 3 publication dates| D{Two-record package?}
-    C -->|> 3 dates| X
-    D -->|Both coherence tests| E[✓ Package]
-    D -->|Only one| X
-    E --> F[Stable logical identity<br/>coordination agency : earliest date : core key]
-    F --> G[Immutable versions<br/>supersedes_version_id on change]
-```
-
-## What you get: the evidence-first outputs
-
-Every nightly run publishes **one atomic generation** of seven schema-v2 JSON files:
-
-| File | Contents |
-|---|---|
-| `daily_activity.json` | Daily FR totals, document-type and per-agency counts |
-| `packages.json` | Coherent regulatory packages with **evidence for every component record** |
-| `standalone.json` | Consequential standalone actions with exact watchlist-match evidence |
-| `fr_metrics.json` | Per-agency complete-week activity, sustained level shifts, pipeline ratios |
-| `marc_horizon.json` | MARC-only topic emergence with cataloged-date evidence and batch-risk confidence |
-| `health.json` | Source freshness contract: attempts, successes, last publication/catalog dates |
-| `brief.json` | **Digest-sized** evidence-first brief; only high/medium-confidence, notifiable signals |
-
-Each package evidence entry contains: `record_id`, `title`, `official_url`, `publication_date`, `doc_type`, matched phrases, coverage tags, and **taxonomy versions** — the full audit trail.
-
-> [!TIP]
-> Low-confidence packages are **dashboard-only**. They never enter the brief or a notification channel.
-
-## Real output, real data
-
-These charts are generated from a real v0.2 run against a **1.3-million-row semantic clone of the production database** (August 13, 2026 data). Not mock data.
-
-<img src="docs/images/daily-activity.svg" alt="Daily Federal Register activity by document type" width="560">
-
-<img src="docs/images/top-agencies.svg" alt="Most active agencies on 2026-08-13" width="560">
-
-<img src="docs/images/package-confidence.svg" alt="Package confidence distribution" width="420">
-
-That run detected coherent packages at CDC (fund/award actions), NCUA (credit-union rulemaking), and PHMSA (hazardous-materials authorizations) — each with 10–17 component records, stable package IDs, and exact official URLs per record.
-
-## Honest statistics by design
-
-The v0.1 product used the same z-score trick everywhere. v0.2 fixes that:
-
-| Situation | v0.1 behavior | v0.2 behavior |
-|---|---|---|
-| Low-count baseline (mean < 5) | Ordinary z-score (wrong) | **Exact Poisson upper-tail** path |
-| Zero-variance baseline | Manufactured alert | **No numeric z-score** — reports insufficient evidence |
-| FR + MARC mixed | Combined into one series | **Never combined** — separate clocks |
-| Week definition | Arbitrary windows | **Complete Monday–Friday Eastern weeks**, zero weeks included, partial current week excluded |
-| Agency metrics | Global aggregate | **Per canonical agency** — one agency can't contaminate another's baseline |
-| Rulemaking pipeline | Single opaque RCR churn | **`proposal_to_final_ratio`** (rulemaking pipeline) + **`activity_to_final_ratio`** (workload context), with 1.25× material-change gate and sample/percentile gates |
-| MARC confidence | None | **High only with** ≥10 records, ≥3 cataloging dates, ≥3 agencies, no single date >50% |
-
-## Package lifecycle
-
-```mermaid
-stateDiagram-v2
-    [*] --> new: package appears
-    new --> continuing: unchanged, next run
-    new --> continuing: material change (may notify)
-    continuing --> resolved: disappears from window
-    continuing --> stale: not seen for N days
-    stale --> continuing: reappears (notifies)
-    stale --> resolved: confirmed gone
-    resolved --> [*]
-```
-
-Notification semantics are **sparse and stateful**:
-
-- Notify on: **new**, **materially changed/worsening**, **resolved**, **stale transition**
-- **Never** notify solely because 48 hours elapsed with no change
-- Direction changes bypass the cooldown
-- Low-confidence packages never notify
-
-## Quick start
+## Local validation
 
 ```bash
-# 1. Clone
-git clone https://github.com/michaelcolenso/fedpulse.git && cd fedpulse
-
-# 2. Install (uv required; runtime is stdlib-only)
-uv sync
-
-# 3. Run the offline test suite (temp DBs only, no network)
 PYTHONPATH=src uv run python -m unittest discover -s tests -v
-
-# 4. Generate v2 outputs from an existing database (offline)
-PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 \
-  --db data/fedpulse.db --out data/outputs --skip-ingest --skip-marc
-
-# 5. Full nightly run (network-dependent: FR + MARC ingestion)
-PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 --db data/fedpulse.db --out data/outputs
-
-# 6. Serve the dashboard
-uv run python -m http.server 8000 --directory .
-# open http://localhost:8000/dashboard/
+uv run python -m compileall -q src tests
+python -m json.tool src/fedpulse/config/agency_aliases.json >/dev/null
+node --check dashboard/app.js
+node --check worker/src/index.js
+bash -n scripts/nightly.sh
 ```
 
-## Configuration
+## Nightly operation
 
-All taxonomy lives in `src/fedpulse/config/` as **versioned, exact, human-reviewable JSON**:
+`.github/workflows/nightly.yml` runs the pipeline, restores state from Cloudflare R2, validates state before replacement, persists a rollback copy, publishes immutable dashboard generations to KV, and then advances `current.json`.
 
-| File | Contents |
-|---|---|
-| `agency_aliases.json` | Exact versioned aliases → canonical IDs (CDC variants → `cdc`, etc.) |
-| `direction_phrases.json` | Direction dictionary: word boundaries, Unicode normalization, 3-token negation window |
-| `sector_map.json` | Sector taxonomy for direction+sector package evidence |
-| `watchlists.json` | Exact watchlist rules: agencies, topics, doc types, phrases |
-| `evaluation_events.json` | **Preregistered** historical events + negative controls |
+## Cloudflare Worker
 
-Every output carries the exact taxonomy versions used, so any conclusion can be re-derived.
+The Worker is configured by `wrangler.jsonc` and serves static dashboard assets plus generation-scoped JSON outputs from the `DASHBOARD_DATA` KV binding.
 
-## Operational behavior
-
-- **Loud failures** — malformed FR documents, partial ingestion, and corrupt markers fail the run; a failure snapshot is published so the dashboard never shows false freshness.
-- **Atomic downloads** — ZIP and CSV downloads write to a temp file, fsync, then rename; failed downloads never corrupt a good file.
-- **Safe extraction** — ZIP bombs, path traversal, and symlink members are rejected.
-- **DB-scoped lock** — concurrent pipelines against the same database fail fast instead of corrupting state.
-- **Idempotent migration** — v0.2 schema is additive; existing records are preserved, unchanged records are not rewritten nightly.
-
-## Running the nightly pipeline on GitHub Actions
-
-`.github/workflows/nightly.yml` runs `fedpulse.pipeline_v2` on a schedule using GitHub-hosted runners. Runners are ephemeral, but the pipeline's state (`signal_state`, `package_versions`, per-agency baselines, etc.) must persist across runs, so the workflow round-trips `data/fedpulse.db` through a Cloudflare R2 bucket (`fedpulse-state`) before and after each run — the pipeline itself is untouched and still talks to a local SQLite file exactly as it does today.
-
-Required repository secrets:
-
-| Secret | Purpose |
-|---|---|
-| `FEDPULSE_R2_ACCESS_KEY_ID` | R2 API token access key (S3-compatible) |
-| `FEDPULSE_R2_SECRET_ACCESS_KEY` | R2 API token secret key |
-
-`GITHUB_TOKEN` is provided automatically by Actions and is passed to the pipeline so `marc_sync.py` authenticates its `api.github.com` calls, avoiding the 60 req/hr unauthenticated rate limit on shared runner IPs.
-
-A first run with no object yet in R2 starts from an empty database, same as a fresh local `uv sync` checkout.
-
-## Live dashboard hosting
-
-The dashboard is served by a Cloudflare Worker, **`fedpulse-dashboard`**, at:
-
-**https://fedpulse-dashboard.aged-morning-c8e4.workers.dev/**
-
-`dashboard/index.html`, `app.js`, and `style.css` are bundled directly into the Worker script (they're tiny and change rarely). The seven schema-v2 JSON outputs live in a Cloudflare KV namespace (`fedpulse-dashboard-data`, bound to the Worker as `DASHBOARD_DATA`) and are served at the same `/data/outputs/current/*.json` paths the dashboard already fetches — no changes to `app.js` were needed.
-
-The nightly workflow's **"Publish dashboard data to Cloudflare KV"** step pushes the dereferenced `data/outputs-flat/current/*.json` files to that namespace after every run, so the live dashboard always reflects the latest published snapshot. This requires one more repository secret:
-
-| Secret | Purpose |
-|---|---|
-| `CLOUDFLARE_API_TOKEN` | API token with **Workers KV Storage: Edit** permission on the account |
-
-> [!NOTE]
-> `outputs_v2.py` publishes `data/outputs/current/` via symlinks; the workflow's "Dereference output symlinks for upload" step (`cp -rL`) already resolves these before anything is uploaded, so the KV-publish step just reads plain files.
-
-## Development & testing
-
-- **Python 3.11+**, runtime **stdlib-only** (`sqlite3`, `zoneinfo`, `statistics`, `hashlib`, `json`, `fcntl`).
-- All tests use **temporary SQLite databases** and golden fixtures — fully offline, fully deterministic.
-- `tests/fixtures/v2_records.json` covers golden packages, unrelated same-day batches, transitive date spans, identity/supersession, negation, and low-confidence filtering.
+Deploy with:
 
 ```bash
-PYTHONPATH=src uv run python -m unittest discover -s tests -v   # 78 tests
-bash -n scripts/nightly.sh                                        # shell check
-uv run python -m compileall -q src tests                          # compile check
+npx wrangler deploy
 ```
 
-## Honest evaluation
+## v0.4 direction
 
-`src/fedpulse/config/evaluation_events.json` is the **preregistered ledger** — written before threshold tuning:
+The next product stage is Regulations.gov docket lifecycle enrichment. See:
 
-- Predictive events require the preregistered **minimum lead time** (≥ 30 days)
-- Evidence appearing **after** an event is rejected
-- **Negative controls** are separated by signal class: horizon controls never inflate the predictive false-positive rate
-- Precision, recall, FPR, and median lead are reported for predictive signals; MARC horizon emergence is reported **separately** and is never counted as a predictive hit
+```text
+docs/superpowers/specs/2026-08-16-fedpulse-v0.4-regulationsgov-lifecycle.md
+```
 
-> [!WARNING]
-> The legacy v0.1 `4/9` backtest framing was misleading (event-date-only checks, post-event matches counted). FedPulse v0.2 replaces it with timing-correct, control-separated evaluation.
-
-### Latest run (2026-08-14, 1.3M-row acceptance clone)
-
-| Metric | Value |
-|---|---|
-| Predictive precision | 0.500 |
-| Predictive recall | 0.714 |
-| Predictive FPR | 0.714 |
-| Median lead time | 450 days |
-
-- **5/7 preregistered predictive events fired early**: SEC climate disclosure (555d), EPA PFAS drinking-water standards (653d), FTC non-compete (450d), SEC money-market reforms (120d), FDA booster era (78d)
-- **2 misses** were genuinely early-warning failures (CFPB late fees, FCC net neutrality)
-- **Horizon controls correctly rejected post-event evidence** — both MARC-horizon misses were discarded because the topic evidence occurred *after* the event date
-- The 0.714 FPR is honest and important: elevated pipeline ratios are **persistent conditions, not one-shot predictions**. FedPulse reports them as supporting context — which is exactly why the product is framed as *monitoring*, not *forecasting*
-
-Full report: [`docs/evaluation/2026-08-14-backtest.md`](docs/evaluation/2026-08-14-backtest.md)
-
-## Boundaries
-
-FedPulse **does not**:
-
-- Read or summarize full regulatory text
-- Use generative NLP, embeddings, or runtime LLMs
-- Provide legal conclusions or compliance guarantees
-- Send messages to any external channel from this repository (Telegram delivery is a separate, operator-managed layer)
-
-## Data provenance
-
-- **Federal Register API** — https://www.federalregister.gov/developers
-- **GPO MARC catalog** — public-domain catalog metadata from GPO's GitHub maintenance repositories:
-  - https://github.com/usgpo/cataloging-records-all-cgp-utf8
-  - https://github.com/usgpo/cataloging-records-CGP-maintenance-files
-
-All input data is public-domain government metadata. The durable value is the cleaning, stable package identity, evidence packaging, freshness, and operational reliability on top of it.
-
----
-
-<div align="center">
-
-**FedPulse — deterministic regulatory signal, backed by official records.**
-
-</div>
+The v0.4 goal is to turn Federal Register records and packages into docket-centered lifecycle signals: proposal open, comment window closed, agency review activity, final rule published, implementation follow-up, or withdrawal/termination.

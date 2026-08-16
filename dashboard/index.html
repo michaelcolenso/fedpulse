@@ -3,30 +3,66 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FedPulse — Evidence Watchlist v0.2</title>
+  <meta name="description" content="FedPulse turns Federal Register and GPO metadata into evidence-ranked federal activity signals.">
+  <title>FedPulse — Federal activity worth watching</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="masthead">
-    <div class="brand"><span class="logo" aria-hidden="true">FP</span><div><h1>FedPulse</h1><p>Evidence-ranked federal action · metadata only · monitoring, not prediction</p></div></div>
-    <div id="asof" class="asof">as of —</div>
+    <a class="brand" href="/" aria-label="FedPulse home"><span class="logo" aria-hidden="true">FP</span><span><strong>FedPulse</strong><small>Federal activity, ranked by evidence</small></span></a>
+    <div class="header-meta"><span id="asof">as of —</span><span id="generation">generation —</span></div>
   </header>
+
   <main>
-    <section id="freshness" class="banner" aria-live="polite">Loading source freshness…</section>
-    <section class="panel totals"><div class="section-heading"><div><h2>Daily Federal Register activity</h2><p class="muted">The daily clock is separate from weekly and monthly signals.</p></div></div><div id="daily" class="daily">Awaiting schema-v2 output…</div></section>
+    <section id="freshness" class="health-strip" aria-live="polite">Loading source freshness…</section>
+
+    <section class="hero panel">
+      <div class="eyebrow">Daily intelligence brief</div>
+      <div class="hero-grid">
+        <div>
+          <h1>What deserves attention today</h1>
+          <p>Evidence-ranked federal activity with the exact official records behind every signal.</p>
+        </div>
+        <div class="hero-stat"><strong id="signal-count">0</strong><span>signals worth watching</span></div>
+      </div>
+      <div id="signals" class="signal-list"><div class="empty">Loading today’s signals…</div></div>
+    </section>
+
+    <section class="pulse-grid">
+      <section class="panel pulse-panel">
+        <div class="section-heading"><div><div class="eyebrow">Federal Register</div><h2>Today’s federal pulse</h2></div><span id="daily-total" class="big-number">0</span></div>
+        <div id="daily-breakdown" class="stat-grid"></div>
+      </section>
+      <section class="panel pulse-panel">
+        <div class="section-heading"><div><div class="eyebrow">Movement</div><h2>Agencies outside baseline</h2></div></div>
+        <div id="metric-highlights" class="metric-highlights"><div class="empty">Loading metrics…</div></div>
+      </section>
+    </section>
+
     <section class="panel">
-      <div class="section-heading"><div><h2>Coordinated regulatory packages</h2><p class="muted">Deterministic, bounded evidence clusters. Low confidence stays visible here but never enters the brief.</p></div><span id="package-count" class="count">0</span></div>
-      <div class="filters" role="group" aria-label="Package filters"><input id="agency-filter" placeholder="agency" autocomplete="off"><input id="direction-filter" placeholder="direction" autocomplete="off"><input id="sector-filter" placeholder="sector" autocomplete="off"><input id="family-filter" placeholder="document family" autocomplete="off"><select id="confidence-filter"><option value="">all confidence</option><option>high</option><option>medium</option><option>low</option></select><select id="lifecycle-filter"><option value="">all lifecycle</option><option>new</option><option>continuing</option><option>stale</option><option>resolved</option></select></div>
-      <div id="packages" class="cards"><div class="empty">Awaiting schema-v2 output…</div></div>
+      <div class="section-heading"><div><div class="eyebrow">Evidence packages</div><h2>Coordinated federal actions</h2><p class="muted">Filter the full evidence set. Diagnostics remain visible here even when they are excluded from the brief.</p></div><span id="package-count" class="count">0</span></div>
+      <div class="filters" role="group" aria-label="Package filters">
+        <input id="agency-filter" aria-label="Filter by agency" placeholder="Agency" autocomplete="off">
+        <input id="direction-filter" aria-label="Filter by direction" placeholder="Direction" autocomplete="off">
+        <input id="sector-filter" aria-label="Filter by sector" placeholder="Sector" autocomplete="off">
+        <select id="confidence-filter" aria-label="Filter by confidence"><option value="">All confidence</option><option>high</option><option>medium</option><option>low</option></select>
+        <select id="lifecycle-filter" aria-label="Filter by lifecycle"><option value="">All lifecycle</option><option>new</option><option>continuing</option><option>stale</option><option>resolved</option></select>
+      </div>
+      <div id="packages" class="cards"></div>
     </section>
-    <section class="panel"><div class="section-heading"><div><h2>Standalone watchlist</h2><p class="muted">Exact taxonomy matches with record-level evidence.</p></div><span id="standalone-count" class="count">0</span></div><div id="standalone" class="cards"><div class="empty">Awaiting schema-v2 output…</div></div></section>
+
     <section class="secondary">
-      <section class="panel"><div class="section-heading"><div><h2>Federal Register metrics</h2><p class="muted">Complete Mon–Fri weeks only; per-agency series.</p></div></div><div id="fr-metrics" class="cards"><div class="empty">Awaiting schema-v2 output…</div></div></section>
-      <section class="panel"><div class="section-heading"><div><h2>MARC Government Topic Horizon</h2><p class="muted">Cataloged-date clock; batch-risk and low-confidence items remain dashboard-visible.</p></div></div><div id="marc" class="cards"><div class="empty">Awaiting schema-v2 output…</div></div></section>
+      <section class="panel"><div class="section-heading"><div><div class="eyebrow">Exact matches</div><h2>Standalone watchlist</h2></div><span id="standalone-count" class="count">0</span></div><div id="standalone" class="cards"></div></section>
+      <section class="panel"><div class="section-heading"><div><div class="eyebrow">Slower signal</div><h2>Emerging government topics</h2><p class="muted">GPO catalog activity is kept on its own clock.</p></div></div><div id="marc" class="cards"></div></section>
     </section>
-    <section class="panel methodology"><h2>Methodology and boundaries</h2><div class="method-grid"><p><strong>Evidence first.</strong> Every package and standalone item links to official source records. FedPulse classifies metadata; it does not read or summarize full text.</p><p><strong>Separate clocks.</strong> FR daily totals, complete-week FR activity/level metrics, MARC cataloged-date horizon, and source freshness are not interchangeable.</p><p><strong>Confidence is a gate.</strong> Unknown agencies, missing URLs, concentrated MARC batches, and weak samples lower confidence. Low-confidence signals are not Telegram/brief candidates.</p><p><strong>Lifecycle.</strong> New, continuing, stale, and resolved state is persisted. Unchanged continuing signals do not notify merely because a cooldown elapsed; material changes and transitions do.</p></div></section>
+
+    <details class="panel diagnostics">
+      <summary>Methodology & diagnostic metrics</summary>
+      <div class="method-grid"><p><strong>Evidence first.</strong> Signals link to official source records.</p><p><strong>Separate clocks.</strong> Daily FR activity and MARC catalog emergence are never blended.</p><p><strong>Confidence gates notifications.</strong> Weak evidence stays inspectable without becoming an alert.</p><p><strong>Lifecycle is stateful.</strong> New, continuing, stale and resolved transitions persist across runs.</p></div>
+      <div id="fr-metrics" class="cards"></div>
+    </details>
   </main>
-  <footer id="status" aria-live="polite">Loading schema-v2 snapshots…</footer>
+  <footer id="status" aria-live="polite">Loading snapshot…</footer>
   <script src="app.js"></script>
 </body>
 </html>

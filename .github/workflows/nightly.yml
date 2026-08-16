@@ -2,12 +2,9 @@ name: FedPulse nightly pipeline
 
 on:
   schedule:
-    # 11:17 UTC ≈ 6:17/7:17am America/New_York depending on DST — after the
-    # Federal Register's overnight publication run.
     - cron: "17 11 * * *"
   workflow_dispatch: {}
 
-# Never let two runs touch the same state.db concurrently.
 concurrency:
   group: fedpulse-nightly
   cancel-in-progress: false
@@ -19,6 +16,8 @@ env:
   R2_ENDPOINT: https://4e921a01da1f55b0ddb32bb38a5524ce.r2.cloudflarestorage.com
   R2_BUCKET: fedpulse-state
   R2_DB_KEY: fedpulse.db
+  CLOUDFLARE_ACCOUNT_ID: 4e921a01da1f55b0ddb32bb38a5524ce
+  CLOUDFLARE_KV_NAMESPACE_ID: 4df2d8d44f8d495e810fc3b888a4885b
 
 jobs:
   run:
@@ -34,11 +33,29 @@ jobs:
           enable-cache: true
 
       - name: Restore state.db from R2
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p data
-          aws s3 cp "s3://${R2_BUCKET}/${R2_DB_KEY}" data/fedpulse.db \
-            --endpoint-url "$R2_ENDPOINT" \
-            || echo "No prior state object in R2 — starting a fresh database."
+          set +e
+          HEAD_OUTPUT=$(aws s3api head-object \
+            --bucket "$R2_BUCKET" \
+            --key "$R2_DB_KEY" \
+            --endpoint-url "$R2_ENDPOINT" 2>&1)
+          HEAD_CODE=$?
+          set -e
+
+          if [ "$HEAD_CODE" -eq 0 ]; then
+            aws s3 cp "s3://${R2_BUCKET}/${R2_DB_KEY}" data/fedpulse.db --endpoint-url "$R2_ENDPOINT"
+            PYTHONPATH=src uv run python scripts/validate_state.py data/fedpulse.db --write-json /tmp/fedpulse-baseline.json
+            cp data/fedpulse.db data/fedpulse.before.db
+          elif printf '%s' "$HEAD_OUTPUT" | grep -Eqi '(404|Not Found|NoSuchKey)'; then
+            echo "No prior state object exists in R2; bootstrapping a fresh database."
+          else
+            echo "$HEAD_OUTPUT" >&2
+            echo "R2 restore failed for a reason other than a missing object; refusing to bootstrap." >&2
+            exit "$HEAD_CODE"
+          fi
 
       - name: Run nightly pipeline
         env:
@@ -47,18 +64,30 @@ jobs:
           PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 \
             --db data/fedpulse.db --out data/outputs
 
-      - name: Persist state.db back to R2
-        if: always()
+      - name: Validate generated state before persistence
         run: |
-          if [ -f data/fedpulse.db ]; then
-            aws s3 cp data/fedpulse.db "s3://${R2_BUCKET}/${R2_DB_KEY}" \
-              --endpoint-url "$R2_ENDPOINT"
+          if [ -f /tmp/fedpulse-baseline.json ]; then
+            PYTHONPATH=src uv run python scripts/validate_state.py data/fedpulse.db \
+              --baseline-json /tmp/fedpulse-baseline.json \
+              --write-json /tmp/fedpulse-current.json
+          else
+            PYTHONPATH=src uv run python scripts/validate_state.py data/fedpulse.db \
+              --write-json /tmp/fedpulse-current.json
           fi
 
+      - name: Back up previous state and persist validated state to R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp=$(date -u +'%Y%m%dT%H%M%SZ')
+          if [ -f data/fedpulse.before.db ]; then
+            aws s3 cp data/fedpulse.before.db "s3://${R2_BUCKET}/history/${stamp}-pre-run.db" \
+              --endpoint-url "$R2_ENDPOINT"
+          fi
+          aws s3 cp data/fedpulse.db "s3://${R2_BUCKET}/${R2_DB_KEY}" \
+            --endpoint-url "$R2_ENDPOINT"
+
       - name: Dereference output symlinks for upload
-        # publish_snapshot() in outputs_v2.py activates each generation via a
-        # symlinked `current/` pointer; upload-artifact does not resolve
-        # symlinks, so copy through them into plain files first.
         if: always()
         run: |
           if [ -d data/outputs ]; then
@@ -74,19 +103,10 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-      - name: Publish dashboard data to Cloudflare KV
-        # Feeds the fedpulse-dashboard Worker (https://fedpulse-dashboard.aged-morning-c8e4.workers.dev),
-        # which serves dashboard/ and reads these seven files straight from KV.
-        if: always()
+      - name: Publish complete dashboard generation to Cloudflare KV
+        if: success()
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          if [ -d data/outputs-flat/current ]; then
-            for f in daily_activity packages standalone fr_metrics marc_horizon health brief; do
-              curl -sS -f -X PUT \
-                "https://api.cloudflare.com/client/v4/accounts/4e921a01da1f55b0ddb32bb38a5524ce/storage/kv/namespaces/4df2d8d44f8d495e810fc3b888a4885b/values/${f}.json" \
-                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-                -H "Content-Type: application/json" \
-                --data-binary "@data/outputs-flat/current/${f}.json"
-            done
-          fi
+          PYTHONPATH=src uv run python scripts/publish_dashboard.py \
+            data/outputs-flat/current --legacy-flat
