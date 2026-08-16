@@ -1,27 +1,59 @@
-"""Zero-key congressional Bill Status client using GovInfo bulk XML + RSS."""
+"""Zero-key Congressional Bill Status client using GovInfo bulk JSON directory listings + XML."""
 from __future__ import annotations
 
-import html
-import re
+import datetime as dt
+import json
 import urllib.request
 import xml.etree.ElementTree as ET
 
 from .action_graph import GovernmentEvent
 
 USER_AGENT = "FedPulse/0.4 (public federal government monitoring)"
-RSS_URL = "https://www.govinfo.gov/rss/billstatus-batch.xml"
+CURRENT_CONGRESS = 119
+BULK_JSON_ROOT = f"https://www.govinfo.gov/bulkdata/json/BILLSTATUS/{CURRENT_CONGRESS}"
 
 
 def fetch_bytes(url: str, timeout: int = 90) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/xml,text/xml,*/*"})
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json,application/xml,text/xml,*/*"})
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return response.read()
 
 
-def updated_bill_urls(rss_bytes: bytes, max_files: int = 200) -> list[str]:
-    text = rss_bytes.decode("utf-8", "replace")
-    urls = re.findall(r"https://www\.govinfo\.gov/bulkdata/BILLSTATUS/\d+/[a-z]+/BILLSTATUS-[^\s<&\"']+\.xml", html.unescape(text), re.I)
-    return list(dict.fromkeys(urls))[:max_files]
+def fetch_json(url: str, timeout: int = 90) -> dict:
+    return json.loads(fetch_bytes(url, timeout).decode("utf-8"))
+
+
+def _modified(item: dict) -> dt.datetime:
+    value = item.get("formattedLastModifiedTime") or ""
+    for fmt in ("%d-%b-%Y %H:%M", "%d-%b-%Y"):
+        try: return dt.datetime.strptime(value, fmt)
+        except ValueError: pass
+    return dt.datetime.min
+
+
+def recent_bill_urls(max_files: int = 100, congress: int = CURRENT_CONGRESS) -> list[str]:
+    """Discover recently modified Bill Status XML files from GovInfo's public JSON bulk directory."""
+    root_url = f"https://www.govinfo.gov/bulkdata/json/BILLSTATUS/{congress}"
+    root = fetch_json(root_url)
+    files = []
+    for folder in root.get("files") or []:
+        if not folder.get("folder"): continue
+        folder_url = folder.get("link") or f"{root_url}/{folder.get('name')}"
+        try:
+            listing = fetch_json(folder_url)
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        for item in listing.get("files") or []:
+            name = str(item.get("name") or item.get("justFileName") or "")
+            if item.get("folder") or not name.lower().endswith(".xml"): continue
+            link = item.get("link") or ""
+            if not link: continue
+            # JSON-directory links can point at the JSON representation; the raw
+            # Bill Status XML lives at the same path without /json/.
+            raw_link = link.replace("/bulkdata/json/", "/bulkdata/")
+            files.append((_modified(item), raw_link))
+    files.sort(key=lambda x: x[0], reverse=True)
+    return [url for _, url in files[:max_files]]
 
 
 def _text(node: ET.Element, path: str) -> str | None:
@@ -66,7 +98,7 @@ def parse_bill(xml_bytes: bytes, url: str) -> GovernmentEvent | None:
 
 
 def pull_recent_updates(max_files: int = 100) -> list[GovernmentEvent]:
-    urls = updated_bill_urls(fetch_bytes(RSS_URL), max_files=max_files)
+    urls = recent_bill_urls(max_files=max_files)
     out = []
     for url in urls:
         try:
