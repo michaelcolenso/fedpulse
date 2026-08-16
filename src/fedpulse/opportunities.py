@@ -28,14 +28,12 @@ def _term_match(term,text):
     if not term:return False
     return re.search(r"(?<![a-z0-9])"+re.escape(term)+r"(?![a-z0-9])",text.lower()) is not None
 def _geo_haystack(row,payload):
-    parts=[str(_row_value(row,"title") or "")]
-    candidates=[]
-    if isinstance(payload,dict): candidates.append(payload)
+    parts=[str(_row_value(row,"title") or "")];candidates=[]
+    if isinstance(payload,dict):candidates.append(payload)
     for name in ("row","fields"):
         value=payload.get(name) if isinstance(payload,dict) else None
-        if isinstance(value,dict): candidates.append(value)
-    location_keys=("state","city","county","location","place","address","performance","worksite","work site","project area","eligible area","service area")
-    seen=set()
+        if isinstance(value,dict):candidates.append(value)
+    location_keys=("state","city","county","location","place","address","performance","worksite","work site","project area","eligible area","service area");seen=set()
     for source in candidates:
         if id(source) in seen:continue
         seen.add(id(source))
@@ -49,12 +47,10 @@ def _identifiers(conn,event_id):
     return out
 def _all_identifiers(conn):
     out=defaultdict(lambda:defaultdict(list))
-    for row in conn.execute("SELECT event_id,namespace,value FROM government_identifiers"):
-        out[row["event_id"]][row["namespace"]].append(row["value"])
+    for row in conn.execute("SELECT event_id,namespace,value FROM government_identifiers"):out[row["event_id"]][row["namespace"]].append(row["value"])
     return out
 def _deadline(payload):
-    row=payload.get("row") if isinstance(payload.get("row"),dict) else payload
-    fields=payload.get("fields") if isinstance(payload.get("fields"),dict) else {}
+    row=payload.get("row") if isinstance(payload.get("row"),dict) else payload;fields=payload.get("fields") if isinstance(payload.get("fields"),dict) else {}
     for source in (row,fields,payload):
         for key in ("ResponseDeadLine","response_deadline","CloseDate","closedate","close_date","applicationduedate"):
             parsed=_date(source.get(key) if isinstance(source,dict) else None)
@@ -92,10 +88,10 @@ def _first_seen_bonus(row,as_of):
 def score_event(row,identifiers,profile,as_of):
     payload=_payload(row);haystack=_haystack(row,payload);geo_haystack=_geo_haystack(row,payload);event_date=_date(_row_value(row,"event_date"));lookback=int(profile.get("lookback_days",7))
     if not event_date or (as_of-event_date).days<0 or (as_of-event_date).days>lookback:return None
-    components={"freshness":max(0,28-(as_of-event_date).days*4),"novelty":0,"relevance":0,"specificity":0,"urgency":0,"magnitude":0,"early_signal":0,"competition":0,"actionability":0}; reasons=[]
+    components={"freshness":max(0,28-(as_of-event_date).days*4),"novelty":0,"relevance":0,"specificity":0,"urgency":0,"magnitude":0,"early_signal":0,"competition":0,"actionability":0};reasons=[]
     novelty,why=_first_seen_bonus(row,as_of);components["novelty"]=novelty
     if why:reasons.append(why)
-    keyword_hits=[x for x in profile.get("keywords",[]) if _term_match(x,haystack)]
+    keyword_hits=[x for x in profile.get("keywords",[]) if _term_match(x,haystack)];weak={str(x).lower() for x in profile.get("weak_keywords",[])};strong_keyword_hits=[x for x in keyword_hits if str(x).lower() not in weak]
     if keyword_hits:components["relevance"]+=min(26,8+len(set(keyword_hits))*3);reasons.append("topic: "+", ".join(sorted(set(keyword_hits))[:4]))
     geo_hits=[x for x in profile.get("geographies",[]) if _term_match(x,geo_haystack)]
     if geo_hits:components["relevance"]+=24;reasons.append("geography: "+", ".join(sorted(set(geo_hits))[:3]))
@@ -103,6 +99,7 @@ def score_event(row,identifiers,profile,as_of):
     if hits:components["relevance"]+=26;reasons.append("NAICS: "+", ".join(hits[:3]))
     agency=str(_row_value(row,"agency") or "");agency_hits=[x for x in profile.get("agencies",[]) if x.lower() in agency.lower()]
     if agency_hits:components["relevance"]+=9;reasons.append("agency: "+agency_hits[0])
+    if not (strong_keyword_hits or geo_hits or hits or agency_hits):return None
     dimensions=sum(bool(x) for x in (keyword_hits,geo_hits,hits,agency_hits))
     if dimensions>=2:components["specificity"]=(dimensions-1)*7;reasons.append(f"{dimensions}-factor profile match")
     amount=float(_row_value(row,"amount")) if _row_value(row,"amount") is not None else None
@@ -120,8 +117,7 @@ def score_event(row,identifiers,profile,as_of):
     if comp_reason:reasons.append(comp_reason)
     if kind in {"contract_opportunity","funding_opportunity"}:components["actionability"]=8
     elif kind=="federal_award_action" and amount:components["actionability"]=4
-    if not (keyword_hits or geo_hits or hits or agency_hits):return None
-    score=sum(components.values()); edge="standard"
+    score=sum(components.values());edge="standard"
     if components["early_signal"]>=17 and dimensions>=2:edge="early"
     elif components["novelty"]>=14 and dimensions>=2:edge="new"
     elif components["specificity"]>=14:edge="high-fit"
