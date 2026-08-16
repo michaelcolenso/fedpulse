@@ -1,7 +1,7 @@
 """Deterministic relevance ranking for FedPulse government-action events."""
 from __future__ import annotations
 import datetime as dt
-import json, os, tempfile
+import json, os, re, tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -23,6 +23,26 @@ def _payload(row):
     try:return json.loads((_row_value(row,"payload_json") or "{}"))
     except (TypeError,json.JSONDecodeError):return {}
 def _haystack(row,payload):return " ".join(str(x or "") for x in (_row_value(row,"title"),_row_value(row,"agency"),_row_value(row,"stage"),json.dumps(payload,ensure_ascii=False))).lower()
+def _term_match(term,text):
+    term=str(term or "").strip().lower()
+    if not term:return False
+    return re.search(r"(?<![a-z0-9])"+re.escape(term)+r"(?![a-z0-9])",text.lower()) is not None
+def _geo_haystack(row,payload):
+    parts=[str(_row_value(row,"title") or "")]
+    candidates=[]
+    if isinstance(payload,dict): candidates.append(payload)
+    for name in ("row","fields"):
+        value=payload.get(name) if isinstance(payload,dict) else None
+        if isinstance(value,dict): candidates.append(value)
+    location_keys=("state","city","county","location","place","address","performance","worksite","work site","project area","eligible area","service area")
+    seen=set()
+    for source in candidates:
+        if id(source) in seen:continue
+        seen.add(id(source))
+        for key,value in source.items():
+            key_norm=str(key).lower().replace("_"," ").replace("-"," ")
+            if any(token in key_norm for token in location_keys):parts.append(str(value or ""))
+    return " ".join(parts).lower()
 def _identifiers(conn,event_id):
     out={}
     for row in conn.execute("SELECT namespace,value FROM government_identifiers WHERE event_id=?",(event_id,)):out.setdefault(row["namespace"],[]).append(row["value"])
@@ -70,14 +90,14 @@ def _first_seen_bonus(row,as_of):
     if age<=3:return 8,"newly discovered"
     return 0,None
 def score_event(row,identifiers,profile,as_of):
-    payload=_payload(row);haystack=_haystack(row,payload);event_date=_date(_row_value(row,"event_date"));lookback=int(profile.get("lookback_days",7))
+    payload=_payload(row);haystack=_haystack(row,payload);geo_haystack=_geo_haystack(row,payload);event_date=_date(_row_value(row,"event_date"));lookback=int(profile.get("lookback_days",7))
     if not event_date or (as_of-event_date).days<0 or (as_of-event_date).days>lookback:return None
     components={"freshness":max(0,28-(as_of-event_date).days*4),"novelty":0,"relevance":0,"specificity":0,"urgency":0,"magnitude":0,"early_signal":0,"competition":0,"actionability":0}; reasons=[]
     novelty,why=_first_seen_bonus(row,as_of);components["novelty"]=novelty
     if why:reasons.append(why)
-    keyword_hits=[x for x in profile.get("keywords",[]) if x.lower() in haystack]
+    keyword_hits=[x for x in profile.get("keywords",[]) if _term_match(x,haystack)]
     if keyword_hits:components["relevance"]+=min(26,8+len(set(keyword_hits))*3);reasons.append("topic: "+", ".join(sorted(set(keyword_hits))[:4]))
-    geo_hits=[x for x in profile.get("geographies",[]) if x.lower() in haystack]
+    geo_hits=[x for x in profile.get("geographies",[]) if _term_match(x,geo_haystack)]
     if geo_hits:components["relevance"]+=24;reasons.append("geography: "+", ".join(sorted(set(geo_hits))[:3]))
     naics=set(identifiers.get("naics",[]));hits=sorted(naics & set(str(x) for x in profile.get("naics",[])))
     if hits:components["relevance"]+=26;reasons.append("NAICS: "+", ".join(hits[:3]))
@@ -107,8 +127,7 @@ def score_event(row,identifiers,profile,as_of):
     elif components["specificity"]>=14:edge="high-fit"
     return {"event_id":_row_value(row,"event_id"),"source":_row_value(row,"source"),"kind":kind,"lane":lane_for(kind,days),"stage":_row_value(row,"stage"),"title":_row_value(row,"title"),"agency":_row_value(row,"agency"),"event_date":_row_value(row,"event_date"),"amount":amount,"currency":_row_value(row,"currency"),"official_url":_row_value(row,"official_url"),"score":round(score,1),"score_components":components,"edge":edge,"reasons":reasons,"days_to_close":days,"identifiers":identifiers}
 def _sort_key(x):return (0 if x["edge"]=="early" else 1 if x["edge"]=="new" else 2,-x["score"],x.get("days_to_close") if x.get("days_to_close") is not None else 9999,x["event_id"])
-def _candidate_rows(conn):
-    return conn.execute("SELECT * FROM government_events WHERE kind IN ('contract_opportunity','funding_opportunity','federal_award_action','stakeholder_meeting','legislative_update') ORDER BY COALESCE(event_date,'') DESC,last_seen DESC").fetchall()
+def _candidate_rows(conn):return conn.execute("SELECT * FROM government_events WHERE kind IN ('contract_opportunity','funding_opportunity','federal_award_action','stakeholder_meeting','legislative_update') ORDER BY COALESCE(event_date,'') DESC,last_seen DESC").fetchall()
 def rank_opportunities(conn,as_of,profile_name="default",limit=30):
     profile=load_profile(profile_name);today=dt.date.fromisoformat(as_of);ids_by_event=_all_identifiers(conn);ranked=[]
     for row in _candidate_rows(conn):
@@ -123,8 +142,7 @@ def rank_all_profiles(conn,as_of,limit=30):
             item=score_event(row,ids,profile,today)
             if item:ranked[name].append(item)
     by_profile={}
-    for name,items in ranked.items():
-        items.sort(key=_sort_key);by_profile[name]=items[:limit]
+    for name,items in ranked.items():items.sort(key=_sort_key);by_profile[name]=items[:limit]
     combined={}
     for name,items in by_profile.items():
         for item in items:
