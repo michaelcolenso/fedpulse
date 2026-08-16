@@ -10,9 +10,14 @@ from .action_graph import GovernmentEvent
 
 BASE = "https://api.usaspending.gov/api/v2"
 USER_AGENT = "FedPulse/0.4 (public federal government monitoring)"
-AWARD_TYPE_CODES = [
-    "A", "B", "C", "D", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11",
-    "IDV_A", "IDV_B", "IDV_B_A", "IDV_B_B", "IDV_B_C", "IDV_C", "IDV_D", "IDV_E",
+# USAspending's current spending_by_award endpoint requires each request to
+# contain award types from exactly one group. Query groups independently.
+AWARD_TYPE_GROUPS = [
+    ["A", "B", "C", "D"],
+    ["02", "03", "04", "05", "F001", "F002"],
+    ["07", "08", "F003", "F004"],
+    ["06", "10", "11", "09"],
+    ["IDV_A", "IDV_B", "IDV_B_A", "IDV_B_B", "IDV_B_C", "IDV_C", "IDV_D", "IDV_E"],
 ]
 
 
@@ -55,31 +60,29 @@ def normalize_award(row: dict) -> GovernmentEvent | None:
 def pull_recent_awards(days: int = 3, *, today: dt.date | None = None, page_limit: int = 25) -> list[GovernmentEvent]:
     today = today or dt.date.today()
     start = today - dt.timedelta(days=max(days, 1) - 1)
-    # Keep fields to the current cross-award result contract. Assistance Listing/CFDA
-    # is not a valid spending_by_award result field for every award family; enrich it
-    # later from award details rather than making baseline ingestion fail.
     fields = ["Award ID", "Recipient Name", "Award Amount", "Awarding Agency", "Start Date", "Description", "Award Type"]
-    out = []
-    page = 1
-    while page <= page_limit:
-        payload = {
-            "filters": {
-                "time_period": [{"start_date": start.isoformat(), "end_date": today.isoformat()}],
-                "award_type_codes": AWARD_TYPE_CODES,
-            },
-            "fields": fields,
-            "page": page,
-            "limit": 100,
-            "sort": "Award Amount",
-            "order": "desc",
-            "subawards": False,
-        }
-        data = post_json("/search/spending_by_award/", payload)
-        rows = data.get("results") or []
-        for row in rows:
-            event = normalize_award(row)
-            if event: out.append(event)
-        page_meta = data.get("page_metadata") or {}
-        if not rows or not page_meta.get("hasNext", False): break
-        page += 1
-    return out
+    by_id: dict[str, GovernmentEvent] = {}
+    for award_codes in AWARD_TYPE_GROUPS:
+        page = 1
+        while page <= page_limit:
+            payload = {
+                "filters": {
+                    "time_period": [{"start_date": start.isoformat(), "end_date": today.isoformat()}],
+                    "award_type_codes": award_codes,
+                },
+                "fields": fields,
+                "page": page,
+                "limit": 100,
+                "sort": "Award Amount",
+                "order": "desc",
+                "subawards": False,
+            }
+            data = post_json("/search/spending_by_award/", payload)
+            rows = data.get("results") or []
+            for row in rows:
+                event = normalize_award(row)
+                if event: by_id[event.event_id] = event
+            page_meta = data.get("page_metadata") or {}
+            if not rows or not page_meta.get("hasNext", False): break
+            page += 1
+    return list(by_id.values())
