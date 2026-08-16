@@ -34,38 +34,55 @@ def payload_hash(payload: object) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def upsert_event(conn: sqlite3.Connection, event: GovernmentEvent) -> None:
-    digest = event.content_sha256 or payload_hash(event.payload)
-    conn.execute(
-        """INSERT INTO government_events
-        (event_id,source,source_id,kind,stage,title,agency,event_date,amount,currency,official_url,payload_json,content_sha256)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ON CONFLICT(event_id) DO UPDATE SET
-          kind=excluded.kind,stage=excluded.stage,title=excluded.title,agency=excluded.agency,
-          event_date=excluded.event_date,amount=excluded.amount,currency=excluded.currency,
-          official_url=excluded.official_url,payload_json=excluded.payload_json,
-          content_sha256=excluded.content_sha256,last_seen=datetime('now')""",
-        (
-            event.event_id,event.source,event.source_id,event.kind,event.stage,event.title,event.agency,
-            event.event_date,event.amount,event.currency,event.official_url,
-            json.dumps(event.payload, ensure_ascii=False)[:1_000_000],digest,
-        ),
+_EVENT_UPSERT = """INSERT INTO government_events
+(event_id,source,source_id,kind,stage,title,agency,event_date,amount,currency,official_url,payload_json,content_sha256)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+ON CONFLICT(event_id) DO UPDATE SET
+  kind=excluded.kind,stage=excluded.stage,title=excluded.title,agency=excluded.agency,
+  event_date=excluded.event_date,amount=excluded.amount,currency=excluded.currency,
+  official_url=excluded.official_url,payload_json=excluded.payload_json,
+  content_sha256=excluded.content_sha256,last_seen=datetime('now')"""
+
+
+def _event_row(event: GovernmentEvent) -> tuple:
+    return (
+        event.event_id,event.source,event.source_id,event.kind,event.stage,event.title,event.agency,
+        event.event_date,event.amount,event.currency,event.official_url,
+        json.dumps(event.payload,ensure_ascii=False)[:1_000_000],event.content_sha256 or payload_hash(event.payload),
     )
-    conn.execute("DELETE FROM government_identifiers WHERE event_id=?", (event.event_id,))
-    for namespace, value in event.identifiers:
-        value = str(value or "").strip()
-        if value:
-            conn.execute(
-                "INSERT OR IGNORE INTO government_identifiers(event_id,namespace,value) VALUES (?,?,?)",
-                (event.event_id, namespace, value),
-            )
 
 
-def upsert_events(conn: sqlite3.Connection, events: Iterable[GovernmentEvent]) -> int:
-    count = 0
+def upsert_event(conn: sqlite3.Connection, event: GovernmentEvent) -> None:
+    conn.execute(_EVENT_UPSERT,_event_row(event))
+    conn.execute("DELETE FROM government_identifiers WHERE event_id=?",(event.event_id,))
+    identifiers=[(event.event_id,str(namespace),str(value).strip()) for namespace,value in event.identifiers if str(value or "").strip()]
+    if identifiers:
+        conn.executemany("INSERT OR IGNORE INTO government_identifiers(event_id,namespace,value) VALUES (?,?,?)",identifiers)
+
+
+def upsert_events(conn: sqlite3.Connection, events: Iterable[GovernmentEvent], *, batch_size: int = 1000) -> int:
+    """Bulk-upsert events and identifiers without per-row SQLite round trips."""
+    batch=[]; count=0
+    def flush(items):
+        nonlocal count
+        if not items:return
+        conn.executemany(_EVENT_UPSERT,[_event_row(event) for event in items])
+        ids=[event.event_id for event in items]
+        # Stay comfortably below SQLite's host-parameter limit on older builds.
+        for start in range(0,len(ids),400):
+            chunk=ids[start:start+400]; placeholders=",".join("?" for _ in chunk)
+            conn.execute(f"DELETE FROM government_identifiers WHERE event_id IN ({placeholders})",chunk)
+        identifier_rows=[]
+        for event in items:
+            identifier_rows.extend((event.event_id,str(namespace),str(value).strip()) for namespace,value in event.identifiers if str(value or "").strip())
+        if identifier_rows:
+            conn.executemany("INSERT OR IGNORE INTO government_identifiers(event_id,namespace,value) VALUES (?,?,?)",identifier_rows)
+        count+=len(items)
     for event in events:
-        upsert_event(conn, event)
-        count += 1
+        batch.append(event)
+        if len(batch)>=batch_size:
+            flush(batch);batch=[]
+    flush(batch)
     return count
 
 

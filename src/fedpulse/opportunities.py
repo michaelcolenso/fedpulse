@@ -1,7 +1,8 @@
 """Deterministic relevance ranking for FedPulse government-action events."""
 from __future__ import annotations
 import datetime as dt
-import json, os, tempfile
+import json, os, re, tempfile
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 CONFIG_PATH = Path(__file__).with_name("config") / "watch_profiles.json"
@@ -22,15 +23,36 @@ def _payload(row):
     try:return json.loads((_row_value(row,"payload_json") or "{}"))
     except (TypeError,json.JSONDecodeError):return {}
 def _haystack(row,payload):return " ".join(str(x or "") for x in (_row_value(row,"title"),_row_value(row,"agency"),_row_value(row,"stage"),json.dumps(payload,ensure_ascii=False))).lower()
+def _term_match(term,text):
+    term=str(term or "").strip().lower()
+    if not term:return False
+    return re.search(r"(?<![a-z0-9])"+re.escape(term)+r"(?![a-z0-9])",text.lower()) is not None
+def _geo_haystack(row,payload):
+    parts=[str(_row_value(row,"title") or "")];candidates=[]
+    if isinstance(payload,dict):candidates.append(payload)
+    for name in ("row","fields"):
+        value=payload.get(name) if isinstance(payload,dict) else None
+        if isinstance(value,dict):candidates.append(value)
+    location_keys=("state","city","county","location","place","address","performance","worksite","work site","project area","eligible area","service area");seen=set()
+    for source in candidates:
+        if id(source) in seen:continue
+        seen.add(id(source))
+        for key,value in source.items():
+            key_norm=str(key).lower().replace("_"," ").replace("-"," ")
+            if any(token in key_norm for token in location_keys):parts.append(str(value or ""))
+    return " ".join(parts).lower()
 def _identifiers(conn,event_id):
     out={}
     for row in conn.execute("SELECT namespace,value FROM government_identifiers WHERE event_id=?",(event_id,)):out.setdefault(row["namespace"],[]).append(row["value"])
     return out
+def _all_identifiers(conn):
+    out=defaultdict(lambda:defaultdict(list))
+    for row in conn.execute("SELECT event_id,namespace,value FROM government_identifiers"):out[row["event_id"]][row["namespace"]].append(row["value"])
+    return out
 def _deadline(payload):
-    row=payload.get("row") if isinstance(payload.get("row"),dict) else payload
-    fields=payload.get("fields") if isinstance(payload.get("fields"),dict) else {}
+    row=payload.get("row") if isinstance(payload.get("row"),dict) else payload;fields=payload.get("fields") if isinstance(payload.get("fields"),dict) else {}
     for source in (row,fields,payload):
-        for key in ("ResponseDeadLine","response_deadline","CloseDate","closedate","close_date","closedate","applicationduedate"):
+        for key in ("ResponseDeadLine","response_deadline","CloseDate","closedate","close_date","applicationduedate"):
             parsed=_date(source.get(key) if isinstance(source,dict) else None)
             if parsed:return parsed
     return None
@@ -64,19 +86,20 @@ def _first_seen_bonus(row,as_of):
     if age<=3:return 8,"newly discovered"
     return 0,None
 def score_event(row,identifiers,profile,as_of):
-    payload=_payload(row);haystack=_haystack(row,payload);event_date=_date(_row_value(row,"event_date"));lookback=int(profile.get("lookback_days",7))
+    payload=_payload(row);haystack=_haystack(row,payload);geo_haystack=_geo_haystack(row,payload);event_date=_date(_row_value(row,"event_date"));lookback=int(profile.get("lookback_days",7))
     if not event_date or (as_of-event_date).days<0 or (as_of-event_date).days>lookback:return None
-    components={"freshness":max(0,28-(as_of-event_date).days*4),"novelty":0,"relevance":0,"specificity":0,"urgency":0,"magnitude":0,"early_signal":0,"competition":0,"actionability":0}; reasons=[]
+    components={"freshness":max(0,28-(as_of-event_date).days*4),"novelty":0,"relevance":0,"specificity":0,"urgency":0,"magnitude":0,"early_signal":0,"competition":0,"actionability":0};reasons=[]
     novelty,why=_first_seen_bonus(row,as_of);components["novelty"]=novelty
     if why:reasons.append(why)
-    keyword_hits=[x for x in profile.get("keywords",[]) if x.lower() in haystack]
+    keyword_hits=[x for x in profile.get("keywords",[]) if _term_match(x,haystack)];weak={str(x).lower() for x in profile.get("weak_keywords",[])};strong_keyword_hits=[x for x in keyword_hits if str(x).lower() not in weak]
     if keyword_hits:components["relevance"]+=min(26,8+len(set(keyword_hits))*3);reasons.append("topic: "+", ".join(sorted(set(keyword_hits))[:4]))
-    geo_hits=[x for x in profile.get("geographies",[]) if x.lower() in haystack]
+    geo_hits=[x for x in profile.get("geographies",[]) if _term_match(x,geo_haystack)]
     if geo_hits:components["relevance"]+=24;reasons.append("geography: "+", ".join(sorted(set(geo_hits))[:3]))
     naics=set(identifiers.get("naics",[]));hits=sorted(naics & set(str(x) for x in profile.get("naics",[])))
     if hits:components["relevance"]+=26;reasons.append("NAICS: "+", ".join(hits[:3]))
     agency=str(_row_value(row,"agency") or "");agency_hits=[x for x in profile.get("agencies",[]) if x.lower() in agency.lower()]
     if agency_hits:components["relevance"]+=9;reasons.append("agency: "+agency_hits[0])
+    if not (strong_keyword_hits or geo_hits or hits or agency_hits):return None
     dimensions=sum(bool(x) for x in (keyword_hits,geo_hits,hits,agency_hits))
     if dimensions>=2:components["specificity"]=(dimensions-1)*7;reasons.append(f"{dimensions}-factor profile match")
     amount=float(_row_value(row,"amount")) if _row_value(row,"amount") is not None else None
@@ -94,26 +117,34 @@ def score_event(row,identifiers,profile,as_of):
     if comp_reason:reasons.append(comp_reason)
     if kind in {"contract_opportunity","funding_opportunity"}:components["actionability"]=8
     elif kind=="federal_award_action" and amount:components["actionability"]=4
-    if not (keyword_hits or geo_hits or hits or agency_hits):return None
-    score=sum(components.values()); edge="standard"
+    score=sum(components.values());edge="standard"
     if components["early_signal"]>=17 and dimensions>=2:edge="early"
     elif components["novelty"]>=14 and dimensions>=2:edge="new"
     elif components["specificity"]>=14:edge="high-fit"
     return {"event_id":_row_value(row,"event_id"),"source":_row_value(row,"source"),"kind":kind,"lane":lane_for(kind,days),"stage":_row_value(row,"stage"),"title":_row_value(row,"title"),"agency":_row_value(row,"agency"),"event_date":_row_value(row,"event_date"),"amount":amount,"currency":_row_value(row,"currency"),"official_url":_row_value(row,"official_url"),"score":round(score,1),"score_components":components,"edge":edge,"reasons":reasons,"days_to_close":days,"identifiers":identifiers}
+def _sort_key(x):return (0 if x["edge"]=="early" else 1 if x["edge"]=="new" else 2,-x["score"],x.get("days_to_close") if x.get("days_to_close") is not None else 9999,x["event_id"])
+def _candidate_rows(conn):return conn.execute("SELECT * FROM government_events WHERE kind IN ('contract_opportunity','funding_opportunity','federal_award_action','stakeholder_meeting','legislative_update') ORDER BY COALESCE(event_date,'') DESC,last_seen DESC").fetchall()
 def rank_opportunities(conn,as_of,profile_name="default",limit=30):
-    profile=load_profile(profile_name);today=dt.date.fromisoformat(as_of);ranked=[]
-    rows=conn.execute("SELECT * FROM government_events WHERE kind IN ('contract_opportunity','funding_opportunity','federal_award_action','stakeholder_meeting','legislative_update') ORDER BY COALESCE(event_date,'') DESC,last_seen DESC").fetchall()
-    for row in rows:
-        item=score_event(row,_identifiers(conn,row["event_id"]),profile,today)
+    profile=load_profile(profile_name);today=dt.date.fromisoformat(as_of);ids_by_event=_all_identifiers(conn);ranked=[]
+    for row in _candidate_rows(conn):
+        item=score_event(row,ids_by_event.get(row["event_id"],{}),profile,today)
         if item:ranked.append(item)
-    ranked.sort(key=lambda x:(0 if x["edge"]=="early" else 1 if x["edge"]=="new" else 2,-x["score"],x.get("days_to_close") if x.get("days_to_close") is not None else 9999,x["event_id"]));return ranked[:limit]
+    ranked.sort(key=_sort_key);return ranked[:limit]
 def rank_all_profiles(conn,as_of,limit=30):
-    profiles=load_profiles();by_profile={name:rank_opportunities(conn,as_of,name,limit) for name in profiles};combined={}
+    profiles=load_profiles();today=dt.date.fromisoformat(as_of);ids_by_event=_all_identifiers(conn);ranked={name:[] for name in profiles}
+    for row in _candidate_rows(conn):
+        ids=ids_by_event.get(row["event_id"],{})
+        for name,profile in profiles.items():
+            item=score_event(row,ids,profile,today)
+            if item:ranked[name].append(item)
+    by_profile={}
+    for name,items in ranked.items():items.sort(key=_sort_key);by_profile[name]=items[:limit]
+    combined={}
     for name,items in by_profile.items():
         for item in items:
             current=combined.setdefault(item["event_id"],{**item,"profiles":[],"profile_scores":{}});current["profiles"].append(name);current["profile_scores"][name]=item["score"]
             if item["score"]>current["score"]:current.update({k:v for k,v in item.items() if k not in {"profiles","profile_scores"}})
-    items=list(combined.values());items.sort(key=lambda x:(0 if x["edge"]=="early" else 1 if x["edge"]=="new" else 2,-x["score"]));lanes={key:[x for x in items if x["lane"]==key] for key in ("act_now","market_intelligence","policy_signals")};return by_profile,lanes,items[:limit]
+    items=list(combined.values());items.sort(key=_sort_key);lanes={key:[x for x in items if x["lane"]==key] for key in ("act_now","market_intelligence","policy_signals")};return by_profile,lanes,items[:limit]
 def publish_opportunities(conn,as_of,out_dir,now,*,profile_name="default",freshness=None):
     if now.tzinfo is None:now=now.replace(tzinfo=dt.timezone.utc)
     by_profile,lanes,items=rank_all_profiles(conn,as_of);profiles=load_profiles();payload={"schema_version":2,"generated_at":now.astimezone(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00","Z"),"generated_at_timezone":"UTC","as_of":as_of,"as_of_timezone":"America/New_York","source_freshness":freshness or {},"profile":{"name":"all","label":"All watch profiles"},"profiles":{name:{"label":profiles[name].get("label"),"items":vals} for name,vals in by_profile.items()},"lanes":lanes,"items":items}
