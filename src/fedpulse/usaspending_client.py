@@ -73,7 +73,7 @@ def pull_recent_awards(days: int = 3, *, today: dt.date | None = None, page_limi
                 "fields": fields,
                 "page": page,
                 "limit": 100,
-                "sort": "Award Amount",
+                "sort": "Award ID",
                 "order": "desc",
                 "subawards": False,
             }
