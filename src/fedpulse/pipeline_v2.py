@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from . import db, fr_client, marc_sync, regulations_client
 from .health import record_attempt, record_failure, record_success
 from .outputs_v2 import build_v2_outputs, publish_failure_outputs
+from .outputs_v4 import publish_regulatory_lifecycle_output
 from .regulatory_lifecycle import build_lifecycles, link_fr_documents, upsert_regulations_document
 
 @contextmanager
@@ -83,11 +84,12 @@ def run_pipeline(db_path: Path, out_dir: Path, as_of: str | None = None, *, inge
                 except Exception as exc:
                     conn.rollback(); record_failure(conn,"regulations_gov",stamp,str(exc))
             else:
-                # Optional until the production api.data.gov key is configured.
                 record_success(conn,"regulations_gov",stamp,"disabled: REGULATIONS_GOV_API_KEY not configured")
-        record_success(conn,"pipeline",stamp,"sources complete; publishing v2 outputs")
+        record_success(conn,"pipeline",stamp,"sources complete; publishing outputs")
         try:
             build_v2_outputs(conn,as_of,out_dir,now)
+            publish_regulatory_lifecycle_output(conn,as_of,out_dir,now)
+            conn.commit()
             conn.close(); return 0
         except Exception as exc:
             record_failure(conn,"pipeline",stamp,str(exc))
