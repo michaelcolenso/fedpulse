@@ -14,8 +14,11 @@ class TestDashboard(unittest.TestCase):
         self.assertNotRegex(js,r"api\\.json|rcr\\.json|ter\\.json")
         for token in ("agency-filter","direction-filter","sector-filter","confidence-filter","lifecycle-filter"):
             self.assertIn(token,html)
-        for token in ("What changed","Why FedPulse flagged it","Who may care","Evidence"):
+        for token in ("What happened","Why it matters","Why FedPulse noticed","What to do","See the evidence"):
             self.assertIn(token,js)
+        self.assertIn("Nothing requires your attention today",js)
+        self.assertIn("Also watching",html)
+        self.assertIn("Evidence explorer",html)
         self.assertIn("esc(",js); self.assertIn("target=\"_blank\"",js); self.assertIn("rel=\"noopener noreferrer\"",js)
         self.assertIn("low-confidence",js)
         self.assertIn("methodology", html.lower())
