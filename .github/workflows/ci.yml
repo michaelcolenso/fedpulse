@@ -31,7 +31,7 @@ jobs:
               print(path)
           PY
       - name: Validate dashboard JavaScript syntax
-        run: node --check dashboard/app.js && node --check dashboard/opportunities.js && node --check worker/src/index.js
+        run: node --check dashboard/app.js && node --check dashboard/opportunities.js && node --check dashboard/hidden-gems.js && node --check worker/src/index.js
       - name: Validate shell scripts
         run: bash -n scripts/nightly.sh
 
