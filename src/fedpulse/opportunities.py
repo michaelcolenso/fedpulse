@@ -2,6 +2,7 @@
 from __future__ import annotations
 import datetime as dt
 import json, os, tempfile
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 CONFIG_PATH = Path(__file__).with_name("config") / "watch_profiles.json"
@@ -26,11 +27,16 @@ def _identifiers(conn,event_id):
     out={}
     for row in conn.execute("SELECT namespace,value FROM government_identifiers WHERE event_id=?",(event_id,)):out.setdefault(row["namespace"],[]).append(row["value"])
     return out
+def _all_identifiers(conn):
+    out=defaultdict(lambda:defaultdict(list))
+    for row in conn.execute("SELECT event_id,namespace,value FROM government_identifiers"):
+        out[row["event_id"]][row["namespace"]].append(row["value"])
+    return out
 def _deadline(payload):
     row=payload.get("row") if isinstance(payload.get("row"),dict) else payload
     fields=payload.get("fields") if isinstance(payload.get("fields"),dict) else {}
     for source in (row,fields,payload):
-        for key in ("ResponseDeadLine","response_deadline","CloseDate","closedate","close_date","closedate","applicationduedate"):
+        for key in ("ResponseDeadLine","response_deadline","CloseDate","closedate","close_date","applicationduedate"):
             parsed=_date(source.get(key) if isinstance(source,dict) else None)
             if parsed:return parsed
     return None
@@ -100,20 +106,31 @@ def score_event(row,identifiers,profile,as_of):
     elif components["novelty"]>=14 and dimensions>=2:edge="new"
     elif components["specificity"]>=14:edge="high-fit"
     return {"event_id":_row_value(row,"event_id"),"source":_row_value(row,"source"),"kind":kind,"lane":lane_for(kind,days),"stage":_row_value(row,"stage"),"title":_row_value(row,"title"),"agency":_row_value(row,"agency"),"event_date":_row_value(row,"event_date"),"amount":amount,"currency":_row_value(row,"currency"),"official_url":_row_value(row,"official_url"),"score":round(score,1),"score_components":components,"edge":edge,"reasons":reasons,"days_to_close":days,"identifiers":identifiers}
+def _sort_key(x):return (0 if x["edge"]=="early" else 1 if x["edge"]=="new" else 2,-x["score"],x.get("days_to_close") if x.get("days_to_close") is not None else 9999,x["event_id"])
+def _candidate_rows(conn):
+    return conn.execute("SELECT * FROM government_events WHERE kind IN ('contract_opportunity','funding_opportunity','federal_award_action','stakeholder_meeting','legislative_update') ORDER BY COALESCE(event_date,'') DESC,last_seen DESC").fetchall()
 def rank_opportunities(conn,as_of,profile_name="default",limit=30):
-    profile=load_profile(profile_name);today=dt.date.fromisoformat(as_of);ranked=[]
-    rows=conn.execute("SELECT * FROM government_events WHERE kind IN ('contract_opportunity','funding_opportunity','federal_award_action','stakeholder_meeting','legislative_update') ORDER BY COALESCE(event_date,'') DESC,last_seen DESC").fetchall()
-    for row in rows:
-        item=score_event(row,_identifiers(conn,row["event_id"]),profile,today)
+    profile=load_profile(profile_name);today=dt.date.fromisoformat(as_of);ids_by_event=_all_identifiers(conn);ranked=[]
+    for row in _candidate_rows(conn):
+        item=score_event(row,ids_by_event.get(row["event_id"],{}),profile,today)
         if item:ranked.append(item)
-    ranked.sort(key=lambda x:(0 if x["edge"]=="early" else 1 if x["edge"]=="new" else 2,-x["score"],x.get("days_to_close") if x.get("days_to_close") is not None else 9999,x["event_id"]));return ranked[:limit]
+    ranked.sort(key=_sort_key);return ranked[:limit]
 def rank_all_profiles(conn,as_of,limit=30):
-    profiles=load_profiles();by_profile={name:rank_opportunities(conn,as_of,name,limit) for name in profiles};combined={}
+    profiles=load_profiles();today=dt.date.fromisoformat(as_of);ids_by_event=_all_identifiers(conn);ranked={name:[] for name in profiles}
+    for row in _candidate_rows(conn):
+        ids=ids_by_event.get(row["event_id"],{})
+        for name,profile in profiles.items():
+            item=score_event(row,ids,profile,today)
+            if item:ranked[name].append(item)
+    by_profile={}
+    for name,items in ranked.items():
+        items.sort(key=_sort_key);by_profile[name]=items[:limit]
+    combined={}
     for name,items in by_profile.items():
         for item in items:
             current=combined.setdefault(item["event_id"],{**item,"profiles":[],"profile_scores":{}});current["profiles"].append(name);current["profile_scores"][name]=item["score"]
             if item["score"]>current["score"]:current.update({k:v for k,v in item.items() if k not in {"profiles","profile_scores"}})
-    items=list(combined.values());items.sort(key=lambda x:(0 if x["edge"]=="early" else 1 if x["edge"]=="new" else 2,-x["score"]));lanes={key:[x for x in items if x["lane"]==key] for key in ("act_now","market_intelligence","policy_signals")};return by_profile,lanes,items[:limit]
+    items=list(combined.values());items.sort(key=_sort_key);lanes={key:[x for x in items if x["lane"]==key] for key in ("act_now","market_intelligence","policy_signals")};return by_profile,lanes,items[:limit]
 def publish_opportunities(conn,as_of,out_dir,now,*,profile_name="default",freshness=None):
     if now.tzinfo is None:now=now.replace(tzinfo=dt.timezone.utc)
     by_profile,lanes,items=rank_all_profiles(conn,as_of);profiles=load_profiles();payload={"schema_version":2,"generated_at":now.astimezone(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00","Z"),"generated_at_timezone":"UTC","as_of":as_of,"as_of_timezone":"America/New_York","source_freshness":freshness or {},"profile":{"name":"all","label":"All watch profiles"},"profiles":{name:{"label":profiles[name].get("label"),"items":vals} for name,vals in by_profile.items()},"lanes":lanes,"items":items}
