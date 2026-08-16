@@ -35,6 +35,40 @@ jobs:
       - name: Validate shell scripts
         run: bash -n scripts/nightly.sh
 
+  live-source-smoke:
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/live-source-smoke'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Exercise all zero-key sources against live government data
+        run: |
+          PYTHONPATH=src uv run python - <<'PY'
+          import json, sqlite3, tempfile
+          from pathlib import Path
+          from fedpulse import db, keyless_sources
+
+          root = Path(tempfile.mkdtemp(prefix='fedpulse-live-'))
+          conn = db.connect(root / 'live.db')
+          db.init_db(conn)
+          results = keyless_sources.sync_all(conn, include_bulk=True, oira_meeting_rin_limit=20, congress_file_limit=50)
+          print('LIVE_RESULTS=' + json.dumps(results, sort_keys=True))
+
+          counts = {row['source']: row['n'] for row in conn.execute(
+              'select source, count(*) n from government_events group by source order by source'
+          )}
+          print('EVENT_COUNTS=' + json.dumps(counts, sort_keys=True))
+          print('EDGE_COUNT=' + str(conn.execute('select count(*) from government_edges').fetchone()[0]))
+          for row in conn.execute(
+              "select source,stage,title,event_date,amount from government_events order by coalesce(event_date,'') desc limit 30"
+          ):
+              print('SAMPLE=' + json.dumps(dict(row), sort_keys=True, default=str))
+          failed = [k for k,v in results.items() if v.get('status') == 'failure']
+          if failed:
+              raise SystemExit('live source failures: ' + ','.join(failed))
+          PY
+
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
