@@ -3,44 +3,55 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="FedPulse turns Federal Register and GPO metadata into evidence-ranked federal activity signals.">
-  <title>FedPulse — Federal activity worth watching</title>
+  <meta name="description" content="FedPulse turns official federal publications into a concise daily brief: what changed, why it matters, and what deserves attention.">
+  <title>FedPulse — What changed in Washington</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="masthead">
-    <a class="brand" href="/" aria-label="FedPulse home"><span class="logo" aria-hidden="true">FP</span><span><strong>FedPulse</strong><small>Federal activity, ranked by evidence</small></span></a>
+    <a class="brand" href="/" aria-label="FedPulse home"><span class="logo" aria-hidden="true">FP</span><span><strong>FedPulse</strong><small>Federal activity worth knowing about</small></span></a>
+    <nav class="primary-nav" aria-label="Primary"><a class="active" href="#today">Today</a><a href="#watchlist">Watchlist</a><a href="#pulse">Pulse</a><a href="#evidence">Evidence</a></nav>
     <div class="header-meta"><span id="asof">as of —</span><span id="generation">generation —</span></div>
   </header>
 
-  <main>
-    <section id="freshness" class="health-strip" aria-live="polite">Loading source freshness…</section>
+  <main id="today">
+    <section id="freshness" class="health-strip" aria-live="polite">Checking official sources…</section>
 
-    <section class="hero panel">
-      <div class="eyebrow">Daily intelligence brief</div>
-      <div class="hero-grid">
-        <div>
-          <h1>What deserves attention today</h1>
-          <p>Evidence-ranked federal activity with the exact official records behind every signal.</p>
-        </div>
-        <div class="hero-stat"><strong id="signal-count">0</strong><span>signals worth watching</span></div>
+    <section class="brief-intro">
+      <div>
+        <div class="eyebrow">Today</div>
+        <h1 id="greeting">Federal activity worth your attention.</h1>
+        <p id="brief-summary">Loading today’s federal brief…</p>
       </div>
+      <div class="attention-meter" aria-label="Attention summary">
+        <strong id="signal-count">0</strong>
+        <span>developments<br>worth attention</span>
+      </div>
+    </section>
+
+    <section class="section-block">
+      <div class="section-heading"><div><div class="eyebrow">Priority brief</div><h2>What changed</h2><p class="muted">Only developments that clear FedPulse’s evidence and relevance thresholds appear here.</p></div></div>
       <div id="signals" class="signal-list"><div class="empty">Loading today’s signals…</div></div>
     </section>
 
-    <section class="pulse-grid">
+    <section id="watchlist" class="section-block">
+      <div class="section-heading"><div><div class="eyebrow">Still developing</div><h2>Also watching</h2><p class="muted">Activity that is notable enough to monitor but not strong enough to demand action yet.</p></div><span id="watch-count" class="count">0</span></div>
+      <div id="watching" class="watch-grid"><div class="empty">Loading watchlist…</div></div>
+    </section>
+
+    <section id="pulse" class="pulse-grid">
       <section class="panel pulse-panel">
-        <div class="section-heading"><div><div class="eyebrow">Federal Register</div><h2>Today’s federal pulse</h2></div><span id="daily-total" class="big-number">0</span></div>
+        <div class="section-heading"><div><div class="eyebrow">Federal Register</div><h2>The federal pulse</h2><p class="muted">Official publications in the current business-day snapshot.</p></div><span id="daily-total" class="big-number">0</span></div>
         <div id="daily-breakdown" class="stat-grid"></div>
       </section>
       <section class="panel pulse-panel">
-        <div class="section-heading"><div><div class="eyebrow">Movement</div><h2>Agencies outside baseline</h2></div></div>
-        <div id="metric-highlights" class="metric-highlights"><div class="empty">Loading metrics…</div></div>
+        <div class="section-heading"><div><div class="eyebrow">Movement</div><h2>Agencies outside baseline</h2><p class="muted">Unusual activity, translated into plain language.</p></div></div>
+        <div id="metric-highlights" class="metric-highlights"><div class="empty">Loading agency movement…</div></div>
       </section>
     </section>
 
-    <section class="panel">
-      <div class="section-heading"><div><div class="eyebrow">Evidence packages</div><h2>Coordinated federal actions</h2><p class="muted">Filter the full evidence set. Diagnostics remain visible here even when they are excluded from the brief.</p></div><span id="package-count" class="count">0</span></div>
+    <section id="evidence" class="panel evidence-explorer">
+      <div class="section-heading"><div><div class="eyebrow">Investigate</div><h2>Evidence explorer</h2><p class="muted">The detailed evidence behind the brief. This is where analysts can inspect everything FedPulse detected.</p></div><span id="package-count" class="count">0</span></div>
       <div class="filters" role="group" aria-label="Package filters">
         <input id="agency-filter" aria-label="Filter by agency" placeholder="Agency" autocomplete="off">
         <input id="direction-filter" aria-label="Filter by direction" placeholder="Direction" autocomplete="off">
@@ -53,12 +64,12 @@
 
     <section class="secondary">
       <section class="panel"><div class="section-heading"><div><div class="eyebrow">Exact matches</div><h2>Standalone watchlist</h2></div><span id="standalone-count" class="count">0</span></div><div id="standalone" class="cards"></div></section>
-      <section class="panel"><div class="section-heading"><div><div class="eyebrow">Slower signal</div><h2>Emerging government topics</h2><p class="muted">GPO catalog activity is kept on its own clock.</p></div></div><div id="marc" class="cards"></div></section>
+      <section class="panel"><div class="section-heading"><div><div class="eyebrow">Longer horizon</div><h2>Emerging government topics</h2><p class="muted">GPO catalog activity stays on its own slower clock.</p></div></div><div id="marc" class="cards"></div></section>
     </section>
 
     <details class="panel diagnostics">
       <summary>Methodology & diagnostic metrics</summary>
-      <div class="method-grid"><p><strong>Evidence first.</strong> Signals link to official source records.</p><p><strong>Separate clocks.</strong> Daily FR activity and MARC catalog emergence are never blended.</p><p><strong>Confidence gates notifications.</strong> Weak evidence stays inspectable without becoming an alert.</p><p><strong>Lifecycle is stateful.</strong> New, continuing, stale and resolved transitions persist across runs.</p></div>
+      <div class="method-grid"><p><strong>Evidence first.</strong> Every signal traces back to official records.</p><p><strong>Separate clocks.</strong> Federal Register and GPO activity are never blended into a fake single score.</p><p><strong>Quiet by design.</strong> Weak evidence remains inspectable without becoming an executive alert.</p><p><strong>Stateful.</strong> New, continuing, stale and resolved transitions persist across runs.</p></div>
       <div id="fr-metrics" class="cards"></div>
     </details>
   </main>
