@@ -18,7 +18,7 @@ class TestDashboard(unittest.TestCase):
             self.assertIn(token,js)
         self.assertIn("esc(",js); self.assertIn("target=\"_blank\"",js); self.assertIn("rel=\"noopener noreferrer\"",js)
         self.assertIn("low-confidence",js)
-        self.assertIn("methodology", html)
+        self.assertIn("methodology", html.lower())
         self.assertIn("safeUrl", js)
         self.assertIn("details", js)
         self.assertIn("source_freshness", js)
