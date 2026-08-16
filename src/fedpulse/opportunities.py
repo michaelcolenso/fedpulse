@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -112,7 +114,6 @@ def score_event(row, identifiers: dict[str, list[str]], profile: dict, as_of: dt
     elif kind == "federal_award_action" and amount and amount != 0:
         score += 4
 
-    # Avoid filling the product with merely fresh but irrelevant bulk records.
     if not (keyword_hits or geo_hits or naics_hits or agency_hits):
         return None
 
@@ -149,3 +150,39 @@ def rank_opportunities(conn, as_of: str, profile_name: str = "default", limit: i
             ranked.append(item)
     ranked.sort(key=lambda x: (-x["score"], x.get("days_to_close") if x.get("days_to_close") is not None else 9999, x["event_id"]))
     return ranked[:limit]
+
+
+def publish_opportunities(conn, as_of: str, out_dir: Path, now: dt.datetime, *, profile_name: str = "default", freshness: dict | None = None) -> dict:
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=dt.timezone.utc)
+    profile = load_profile(profile_name)
+    items = rank_opportunities(conn, as_of, profile_name)
+    payload = {
+        "schema_version": 2,
+        "generated_at": now.astimezone(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "generated_at_timezone": "UTC",
+        "as_of": as_of,
+        "as_of_timezone": "America/New_York",
+        "source_freshness": freshness or {},
+        "profile": {"name": profile_name, "label": profile.get("label"), "lookback_days": profile.get("lookback_days")},
+        "items": items,
+    }
+    out_dir = Path(out_dir)
+    targets = [out_dir / "opportunities_today.json"]
+    current = out_dir / "current"
+    if current.exists():
+        targets.append(current / "opportunities_today.json")
+    for target in targets:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, ensure_ascii=False, sort_keys=True, indent=2)
+                fh.write("\n")
+                fh.flush(); os.fsync(fh.fileno())
+            os.replace(tmp, target)
+        except Exception:
+            try: os.unlink(tmp)
+            except OSError: pass
+            raise
+    return payload
