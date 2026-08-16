@@ -1,4 +1,4 @@
--- FedPulse SQLite schema. v0.2 is additive and idempotent.
+-- FedPulse SQLite schema. v0.4 remains additive and idempotent.
 PRAGMA journal_mode = WAL;
 
 CREATE TABLE IF NOT EXISTS records (
@@ -55,4 +55,41 @@ CREATE INDEX IF NOT EXISTS idx_package_version_records_record ON package_version
 CREATE TABLE IF NOT EXISTS pipeline_state (
     component TEXT PRIMARY KEY, last_attempt TEXT, last_success TEXT,
     status TEXT NOT NULL, detail TEXT
+);
+
+-- v0.4: Regulations.gov is stored separately so its docket lifecycle clock does
+-- not contaminate Federal Register publication or MARC catalog metrics.
+CREATE TABLE IF NOT EXISTS regulations_documents (
+    document_id TEXT PRIMARY KEY,
+    docket_id TEXT,
+    agency_id TEXT,
+    document_type TEXT,
+    title TEXT,
+    posted_date TEXT,
+    last_modified_date TEXT,
+    comment_end_date TEXT,
+    withdrawn INTEGER NOT NULL DEFAULT 0,
+    object_id TEXT,
+    fr_doc_number TEXT,
+    raw_json TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_regulations_documents_docket ON regulations_documents(docket_id, posted_date);
+CREATE INDEX IF NOT EXISTS idx_regulations_documents_fr ON regulations_documents(fr_doc_number);
+CREATE TABLE IF NOT EXISTS regulations_fr_links (
+    document_id TEXT NOT NULL,
+    fr_record_id TEXT NOT NULL,
+    link_method TEXT NOT NULL CHECK (link_method IN ('fr_doc_number','docket_id')),
+    PRIMARY KEY (document_id, fr_record_id),
+    FOREIGN KEY (document_id) REFERENCES regulations_documents(document_id) ON DELETE CASCADE,
+    FOREIGN KEY (fr_record_id) REFERENCES records(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_regulations_fr_links_fr ON regulations_fr_links(fr_record_id);
+CREATE TABLE IF NOT EXISTS regulatory_lifecycles (
+    docket_id TEXT PRIMARY KEY,
+    stage TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    payload_json TEXT NOT NULL
 );
