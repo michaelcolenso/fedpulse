@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable
 from zoneinfo import ZoneInfo
 
-from . import db, fr_client, keyless_sources, marc_sync
+from . import db, fr_client, keyless_sources, marc_sync, opportunities
 from .health import record_attempt, record_failure, record_success
 from .outputs_v2 import build_v2_outputs, publish_failure_outputs
 
@@ -77,7 +77,8 @@ def run_pipeline(db_path: Path, out_dir: Path, as_of: str | None = None, *, inge
                 conn.rollback(); record_failure(conn,"keyless_sources",stamp,str(exc))
         record_success(conn,"pipeline",stamp,"sources complete; publishing v2 outputs")
         try:
-            build_v2_outputs(conn,as_of,out_dir,now)
+            payloads = build_v2_outputs(conn,as_of,out_dir,now)
+            opportunities.publish_opportunities(conn, as_of, out_dir, now, freshness=payloads["health"].get("source_freshness", {}))
             conn.close(); return 0
         except Exception as exc:
             record_failure(conn,"pipeline",stamp,str(exc))
