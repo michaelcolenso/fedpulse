@@ -28,6 +28,7 @@
   },
   "pnw_intelligence": {
     "label": "Seattle / Pacific Northwest Intelligence",
+    "require_geography": true,
     "keywords": ["housing", "transportation", "infrastructure", "port", "maritime", "ferry", "shipyard", "energy", "hydropower", "salmon", "environmental", "wildfire", "forest", "tribal", "technology", "aerospace", "manufacturing", "construction", "economic development"],
     "weak_keywords": ["housing", "transportation", "infrastructure", "energy", "environmental", "technology", "manufacturing", "construction"],
     "geographies": ["washington", "washington state", "seattle", "king county", "tacoma", "pierce county", "snohomish", "everett", "bellevue", "bremerton", "kitsap", "olympia", "spokane", "puget sound", "pacific northwest", "oregon", "idaho"],
