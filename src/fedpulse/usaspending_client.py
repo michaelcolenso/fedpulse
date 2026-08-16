@@ -10,13 +10,14 @@ from .action_graph import GovernmentEvent
 
 BASE = "https://api.usaspending.gov/api/v2"
 USER_AGENT = "FedPulse/0.4 (public federal government monitoring)"
-# USAspending's current spending_by_award endpoint requires each request to
-# contain award types from exactly one group. Query groups independently.
+# USAspending spending_by_award validates award types by category. Keep every
+# request inside one current API category rather than mixing assistance families.
 AWARD_TYPE_GROUPS = [
-    ["A", "B", "C", "D"],
-    ["02", "03", "04", "05", "F001", "F002"],
-    ["07", "08", "F003", "F004"],
-    ["06", "10", "11", "09"],
+    ["A", "B", "C", "D"],                                      # contracts
+    ["02", "03", "04", "05", "F001", "F002"],                # grants/cooperative agreements
+    ["07", "08", "F003", "F004"],                            # loans
+    ["06", "10"],                                               # direct payments
+    ["09", "11"],                                               # other financial assistance
     ["IDV_A", "IDV_B", "IDV_B_A", "IDV_B_B", "IDV_B_C", "IDV_C", "IDV_D", "IDV_E"],
 ]
 
