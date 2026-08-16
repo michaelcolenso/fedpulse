@@ -1,0 +1,49 @@
+name: Production State Ranking Smoke
+on:
+  pull_request:
+    paths:
+      - 'src/fedpulse/**'
+      - '.github/workflows/r2-ranking-smoke.yml'
+permissions:
+  contents: read
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.FEDPULSE_R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.FEDPULSE_R2_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: auto
+  R2_ENDPOINT: https://4e921a01da1f55b0ddb32bb38a5524ce.r2.cloudflarestorage.com
+  R2_BUCKET: fedpulse-state
+  R2_DB_KEY: fedpulse.db
+jobs:
+  rank-production-state:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Restore production state
+        run: |
+          mkdir -p data
+          aws s3 cp "s3://${R2_BUCKET}/${R2_DB_KEY}" data/fedpulse.db --endpoint-url "$R2_ENDPOINT"
+      - name: Rank current production corpus
+        env:
+          PYTHONPATH: src
+        run: |
+          uv run python - <<'PY'
+          import datetime as dt, json
+          from fedpulse import db
+          from fedpulse.opportunities import rank_all_profiles
+          from fedpulse.hidden_gems import detect_hidden_gems
+          conn=db.connect('data/fedpulse.db'); as_of=dt.datetime.now(dt.timezone.utc).date().isoformat()
+          counts={r['kind']:r['n'] for r in conn.execute("SELECT kind,count(*) n FROM government_events GROUP BY kind")}
+          by_profile,lanes,items=rank_all_profiles(conn,as_of,60)
+          gems=[]
+          for profile in ('default','ai_technology','business_opportunities','pnw_intelligence'):
+              for item in detect_hidden_gems(conn,as_of,profile,12): gems.append({**item,'profile':profile})
+          gems.sort(key=lambda x:(-x['hidden_gem_score'],-x['score']))
+          def compact(x):
+              return {k:x.get(k) for k in ('event_id','title','agency','stage','event_date','score','edge','days_to_close','official_url','reasons','profiles','hidden_gem_score','hidden_gem_reasons','historical_context') if k in x}
+          print('CORPUS_COUNTS='+json.dumps(counts,sort_keys=True))
+          print('TOP_EARLY='+json.dumps([compact(x) for x in items if x.get('edge')=='early'][:12],sort_keys=True))
+          print('TOP_ACT_NOW='+json.dumps([compact(x) for x in lanes.get('act_now',[])[:12]],sort_keys=True))
+          print('TOP_HIDDEN_GEMS='+json.dumps([compact(x) for x in gems[:16]],sort_keys=True))
+          PY
