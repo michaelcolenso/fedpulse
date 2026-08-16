@@ -24,10 +24,13 @@ class OpportunitiesTests(unittest.TestCase):
         items=rank_opportunities(self.conn,"2026-08-16"); self.assertEqual(items[0]["event_id"],"early"); self.assertEqual(items[0]["edge"],"early"); self.assertGreaterEqual(items[0]["score_components"]["early_signal"],17); self.assertGreater(items[0]["score_components"]["specificity"],0)
     def test_port_does_not_match_support(self):
         self.add("support","Capacity building support services","2026-08-16",agency="Unrelated Agency",payload='{"row":{"Description":"technical support only"}}')
-        items=rank_opportunities(self.conn,"2026-08-16","pnw_intelligence")
-        self.assertFalse(any(x["event_id"]=="support" for x in items))
+        items=rank_opportunities(self.conn,"2026-08-16","pnw_intelligence"); self.assertFalse(any(x["event_id"]=="support" for x in items))
     def test_agency_name_is_not_geography_evidence(self):
         self.add("whs","Generic research program","2026-08-16",agency="Washington Headquarters Services",payload='{"fields":{"agencyname":"Washington Headquarters Services"}}')
-        items=rank_opportunities(self.conn,"2026-08-16","pnw_intelligence")
-        self.assertFalse(any(x["event_id"]=="whs" for x in items))
+        items=rank_opportunities(self.conn,"2026-08-16","pnw_intelligence"); self.assertFalse(any(x["event_id"]=="whs" for x in items))
+    def test_weak_keyword_alone_does_not_surface(self):
+        self.add("capacity","Capacity Building for Public Health Programs","2026-08-16",agency="Health Agency")
+        self.assertFalse(any(x["event_id"]=="capacity" for x in rank_opportunities(self.conn,"2026-08-16")))
+        self.add("pnwweak","National infrastructure planning program","2026-08-16",agency="Unrelated Agency")
+        self.assertFalse(any(x["event_id"]=="pnwweak" for x in rank_opportunities(self.conn,"2026-08-16","pnw_intelligence")))
 if __name__=="__main__": unittest.main()
