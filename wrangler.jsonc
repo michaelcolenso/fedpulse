@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "fedpulse-dashboard",
+  "main": "worker/src/index.js",
+  "compatibility_date": "2026-08-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dashboard",
+    "binding": "ASSETS",
+    "run_worker_first": ["/data/outputs/current/*"]
+  },
+  "kv_namespaces": [
+    {
+      "binding": "DASHBOARD_DATA",
+      "id": "4df2d8d44f8d495e810fc3b888a4885b"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
