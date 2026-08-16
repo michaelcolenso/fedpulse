@@ -34,3 +34,16 @@ jobs:
         run: node --check dashboard/app.js && node --check worker/src/index.js
       - name: Validate shell scripts
         run: bash -n scripts/nightly.sh
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy FedPulse dashboard Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 4e921a01da1f55b0ddb32bb38a5524ce
+        run: npx --yes wrangler@latest deploy --config wrangler.jsonc
