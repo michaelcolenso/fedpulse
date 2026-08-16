@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import datetime as dt
+import html
 import json
+import re
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -21,6 +23,17 @@ def fetch_bytes(url: str, timeout: int = 90) -> bytes:
 
 def fetch_json(url: str, timeout: int = 90) -> dict:
     return json.loads(fetch_bytes(url, timeout).decode("utf-8"))
+
+
+def updated_bill_urls(rss_bytes: bytes, max_files: int = 200) -> list[str]:
+    """Legacy individual-file RSS extractor retained for fixture compatibility.
+
+    Production discovery uses the GovInfo JSON bulk directory because the batch
+    notification feed does not enumerate individual Bill Status XML files.
+    """
+    text = html.unescape(rss_bytes.decode("utf-8", "replace"))
+    urls = re.findall(r"https://www\.govinfo\.gov/bulkdata/BILLSTATUS/\d+/[a-z]+/BILLSTATUS-[^\s<&\"']+\.xml", text, re.I)
+    return list(dict.fromkeys(urls))[:max_files]
 
 
 def _modified(item: dict) -> dt.datetime:
@@ -48,8 +61,6 @@ def recent_bill_urls(max_files: int = 100, congress: int = CURRENT_CONGRESS) -> 
             if item.get("folder") or not name.lower().endswith(".xml"): continue
             link = item.get("link") or ""
             if not link: continue
-            # JSON-directory links can point at the JSON representation; the raw
-            # Bill Status XML lives at the same path without /json/.
             raw_link = link.replace("/bulkdata/json/", "/bulkdata/")
             files.append((_modified(item), raw_link))
     files.sort(key=lambda x: x[0], reverse=True)
