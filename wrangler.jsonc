@@ -2,8 +2,9 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "fedpulse-dashboard",
   "main": "worker/src/index.js",
-  "compatibility_date": "2026-08-15",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_date": "2026-08-16",
+  "workers_dev": true,
+  "preview_urls": false,
   "assets": {
     "directory": "./dashboard",
     "binding": "ASSETS",
