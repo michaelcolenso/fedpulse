@@ -1,6 +1,7 @@
 """Zero-key Grants.gov enhanced daily XML extract client."""
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import io
 import re
@@ -48,6 +49,15 @@ def _pick(row: dict[str, str], *names: str) -> str | None:
     return None
 
 
+def _iso_date(value: str | None) -> str | None:
+    if not value: return None
+    raw = value.strip()
+    for fmt in ("%m%d%Y", "%m/%d/%Y", "%Y-%m-%d"):
+        try: return dt.datetime.strptime(raw, fmt).date().isoformat()
+        except ValueError: pass
+    return raw
+
+
 def _event_from_row(row: dict[str, str], digest: str) -> GovernmentEvent | None:
     opp_id = _pick(row, "opportunityid")
     title = _pick(row, "opportunitytitle")
@@ -61,13 +71,14 @@ def _event_from_row(row: dict[str, str], digest: str) -> GovernmentEvent | None:
     except ValueError: amount = None
     cfda = _pick(row, "cfdanumbers", "assistancelistingnumber", "cfda")
     agency = _pick(row, "agencyname", "agencycode")
-    date = _pick(row, "postdate", "forecastedpostdate", "estimatedpostdate")
+    raw_date = _pick(row, "postdate", "forecastedpostdate", "estimatedpostdate")
+    date = _iso_date(raw_date)
     identifiers = [("grants_opportunity", opp_id)]
     if opp_no: identifiers.append(("opportunity_number", opp_no))
     if cfda:
         for value in re.split(r"[,;\s]+", cfda):
             if value: identifiers.append(("assistance_listing", value))
-    payload = {"opportunity_id": opp_id, "opportunity_number": opp_no, "status": status, "cfda": cfda, "source_sha256": digest, "fields": row}
+    payload = {"opportunity_id": opp_id, "opportunity_number": opp_no, "status": status, "cfda": cfda, "event_date_raw": raw_date, "source_sha256": digest, "fields": row}
     return GovernmentEvent(
         source="grants", source_id=opp_id, kind="funding_opportunity", stage=stage,
         title=title, agency=agency, event_date=date, amount=amount, currency="USD" if amount is not None else None,
@@ -77,12 +88,7 @@ def _event_from_row(row: dict[str, str], digest: str) -> GovernmentEvent | None:
 
 
 def parse_extract(zip_bytes: bytes) -> list[GovernmentEvent]:
-    """Stream opportunity elements from the ~78 MB daily archive.
-
-    Grants.gov documents the v2 common schema as repeated
-    OpportunitySynopsisDetail_1_0 / OpportunityForecastDetail_1_0 elements. Using
-    iterparse prevents the full XML tree from living in memory.
-    """
+    """Stream opportunity elements from the large daily archive."""
     digest = hashlib.sha256(zip_bytes).hexdigest()
     events: dict[str, GovernmentEvent] = {}
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
@@ -94,8 +100,6 @@ def parse_extract(zip_bytes: bytes) -> list[GovernmentEvent]:
                     continue
                 event = _event_from_row(_flat(node), digest)
                 if event:
-                    # A currently forecast opportunity can later also have synopsis data;
-                    # prefer the non-forecast row when both occur in one extract.
                     prior = events.get(event.source_id)
                     if prior is None or (prior.stage == "forecast" and event.stage != "forecast"):
                         events[event.source_id] = event
