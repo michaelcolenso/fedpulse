@@ -1,10 +1,12 @@
 # FedPulse
 
-FedPulse is an evidence-ranked federal regulatory monitoring system built from Federal Register and GPO metadata. It is deterministic, stdlib-only at runtime, and designed around auditable evidence rather than generated summaries.
+Evidence-ranked federal regulatory monitoring from Federal Register and GPO metadata.
+
+FedPulse is deterministic, stdlib-only at runtime, and designed around auditable evidence rather than generated summaries. It turns official publication metadata into daily signals, coordinated action packages, source-health snapshots, and dashboard-ready JSON.
 
 ## v0.3 production-trust release
 
-This release hardens the production boundary around the existing v0.2 evidence engine:
+This release hardens the production boundary around the existing evidence engine:
 
 - R2 state restore fails closed instead of treating every error as an empty bootstrap.
 - SQLite state is validated before it can replace persisted production state.
@@ -14,6 +16,20 @@ This release hardens the production boundary around the existing v0.2 evidence e
 - The Worker and Wrangler configuration live in the repo.
 - CI validates tests, Python compilation, JSON config, dashboard JavaScript, Worker JavaScript, and shell syntax.
 - The dashboard is organized around decision-ready evidence signals instead of raw classifier diagnostics.
+
+## Outputs
+
+Every successful run publishes seven schema-v2 JSON outputs:
+
+- `daily_activity.json`
+- `packages.json`
+- `standalone.json`
+- `fr_metrics.json`
+- `marc_horizon.json`
+- `health.json`
+- `brief.json`
+
+The Cloudflare publisher also writes immutable generation-scoped keys and advances `current.json` only after all files have been uploaded.
 
 ## Dashboard
 
