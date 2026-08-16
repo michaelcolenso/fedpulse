@@ -72,10 +72,11 @@ def upsert_events(conn: sqlite3.Connection, events: Iterable[GovernmentEvent]) -
 def link_exact_identifiers(conn: sqlite3.Connection) -> int:
     """Create deterministic edges for shared strong identifiers.
 
-    Only namespaces whose semantics are exact identity/link keys are used. We do not
-    infer links from titles or agency similarity here.
+    Broad classification identifiers such as NAICS and Assistance Listing/CFDA are
+    intentionally excluded: two awards in the same program are related, but they are
+    not the same government action.
     """
-    strong = {"rin", "grants_opportunity", "assistance_listing", "sam_notice", "solicitation", "award", "bill", "public_law"}
+    strong = {"rin", "grants_opportunity", "sam_notice", "solicitation", "award", "bill", "public_law", "fr_document"}
     rows = conn.execute(
         """SELECT namespace,value,group_concat(event_id) event_ids
            FROM government_identifiers
@@ -111,7 +112,6 @@ def set_cursor(conn: sqlite3.Connection, source: str, cursor: str | None, digest
 
 
 def graph_summary(conn: sqlite3.Connection, limit: int = 100) -> list[dict]:
-    """Return recent events with exact-link neighbors for dashboard/output use."""
     rows = conn.execute(
         "SELECT * FROM government_events ORDER BY COALESCE(event_date,'') DESC,last_seen DESC LIMIT ?",
         (limit,),
