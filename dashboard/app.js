@@ -18,37 +18,70 @@ function packageSectors(p) {
 }
 
 function whyFlagged(p) {
-  return p.selection_reason || (p.confidence_reasons || []).slice(0, 2).join(" · ") || "Multiple official records matched the same bounded evidence pattern.";
+  return p.selection_reason || (p.confidence_reasons || []).slice(0, 2).join(" · ") || "Several official records moved together around the same bounded issue.";
 }
 
 function whoMayCare(p) {
   const sectors = packageSectors(p);
   if (sectors.length) return sectors.slice(0, 4).join(", ");
-  return p.canonical_agency_name ? `Organizations affected by ${p.canonical_agency_name} actions` : "Organizations tracking this federal activity";
+  return p.canonical_agency_name ? `Organizations affected by ${p.canonical_agency_name} actions` : "Organizations exposed to this federal activity";
 }
 
-function signalCard(item) {
+function actionFor(p) {
+  if (p.lifecycle === "resolved") return "Review the outcome and close or update any related watch item.";
+  if (p.confidence === "high" && p.notify) return "Review the evidence now and decide whether this needs an owner.";
+  if (p.lifecycle === "new") return "Monitor. This is new activity; no immediate action is implied yet.";
+  return "Keep watching. Activity is meaningful, but the evidence does not yet imply an immediate response.";
+}
+
+function attentionLabel(p) {
+  if (p.confidence === "high" && p.notify) return ["high attention", "high"];
+  if (p.confidence === "high") return ["watch closely", "high"];
+  return ["medium attention", "medium"];
+}
+
+function priorityCard(item) {
   const p = item.value;
   if (item.type === "standalone") {
-    return `<article class="signal-card"><div class="signal-top"><span class="badge medium">watchlist</span><span class="lifecycle">${text(p.lifecycle || "new")}</span></div><h3>${text(p.canonical_agency_name || p.raw_agency_name)}</h3><p class="signal-title">${text(p.title)}</p><div class="signal-grid"><div><span>Why flagged</span><strong>${text(p.selection_reason || p.matched_value || "Exact watchlist match")}</strong></div><div><span>Evidence</span><strong>1 official record</strong></div></div><a class="primary-link" href="${esc(safeUrl(p.official_url))}" target="_blank" rel="noopener noreferrer">Open evidence ↗</a></article>`;
+    return `<article class="priority-card medium"><div class="priority-top"><span class="attention-pill medium">medium attention</span><span class="lifecycle">${text(p.lifecycle || "new")}</span></div><div class="agency-kicker">${text(p.canonical_agency_name || p.raw_agency_name, "Federal agency")}</div><h3>${text(p.title)}</h3><div class="brief-facts"><div><span>What happened</span><strong>An official record matched a configured watchlist condition.</strong></div><div><span>Why it matters</span><strong>${text(p.selection_reason || p.matched_value || "Exact watchlist match")}</strong></div><div><span>What to do</span><strong>Review the source and decide whether it belongs on an active watchlist.</strong></div></div><a class="primary-link" href="${esc(safeUrl(p.official_url))}" target="_blank" rel="noopener noreferrer">See the evidence ↗</a></article>`;
   }
-  return `<article class="signal-card ${esc(p.confidence || "medium")}"><div class="signal-top"><span class="badge ${esc(p.confidence || "medium")}">${text(p.confidence || "medium")}</span><span class="lifecycle">${text(p.lifecycle || "new")}</span></div><h3>${text(p.label || p.canonical_agency_name)}</h3><p class="signal-title">${text(p.direction || "coordinated activity")} · ${text(p.date_start)} → ${text(p.date_end)}</p><div class="signal-grid"><div><span>What changed</span><strong>${text(p.record_count, "0")} related records across a bounded package</strong></div><div><span>Why FedPulse flagged it</span><strong>${text(whyFlagged(p))}</strong></div><div><span>Who may care</span><strong>${text(whoMayCare(p))}</strong></div><div><span>Evidence</span><strong>${text((p.evidence || []).length, "0")} official records</strong></div></div><details><summary>View source evidence</summary><div class="evidence">${evidenceLinks(p.evidence)}</div></details></article>`;
+  const [label, cls] = attentionLabel(p);
+  return `<article class="priority-card ${cls}"><div class="priority-top"><span class="attention-pill ${cls}">${label}</span><span class="lifecycle">${text(p.lifecycle || "new")}</span></div><div class="agency-kicker">${text(p.canonical_agency_name || p.coordination_agency_name || "Federal activity")}</div><h3>${text(p.label || p.direction || "Coordinated federal activity")}</h3><p class="lede">${text(p.record_count, "0")} related official records moved together from ${text(p.date_start)} through ${text(p.date_end)}.</p><div class="brief-facts"><div><span>What happened</span><strong>${text(p.direction || "Related federal activity increased")}</strong></div><div><span>Why it matters</span><strong>${text(whoMayCare(p))}</strong></div><div><span>Why FedPulse noticed</span><strong>${text(whyFlagged(p))}</strong></div><div><span>What to do</span><strong>${text(actionFor(p))}</strong></div></div><details><summary>See the evidence (${(p.evidence || []).length})</summary><div class="evidence">${evidenceLinks(p.evidence)}</div></details></article>`;
 }
 
 function renderFreshness() {
   const entries = Object.entries(state.health.source_freshness || {});
   const bad = entries.filter(([, v]) => !["fresh", "running"].includes(v.status));
   $("freshness").className = `health-strip ${bad.length ? "degraded" : "fresh"}`;
-  $("freshness").innerHTML = `<strong>${bad.length ? "Source health degraded" : "Sources healthy"}</strong><span>${entries.map(([k,v]) => `${esc(k)} ${esc(v.status)}`).join(" · ") || "No health snapshot"}</span>`;
+  $("freshness").innerHTML = `<strong>${bad.length ? "Some source data needs attention" : "Official sources current"}</strong><span>${entries.map(([k,v]) => `${esc(k.replaceAll("_", " "))}: ${esc(v.status)}`).join(" · ") || "No source-health snapshot"}</span>`;
 }
 
-function renderSignals() {
+function prioritizedSignals() {
   const packages = state.packages.filter((p) => ["high", "medium"].includes(p.confidence) && p.lifecycle !== "diagnostic");
   packages.sort((a,b) => Number(Boolean(b.notify)) - Number(Boolean(a.notify)) || confidenceRank[a.confidence] - confidenceRank[b.confidence]);
   const standalone = state.standalone.filter((s) => s.notify || s.lifecycle === "new");
-  const signals = [...packages.map((value) => ({type:"package", value})), ...standalone.map((value) => ({type:"standalone", value}))].slice(0, 5);
+  return [...packages.map((value) => ({type:"package", value})), ...standalone.map((value) => ({type:"standalone", value}))];
+}
+
+function renderSignals() {
+  const signals = prioritizedSignals().slice(0, 5);
   $("signal-count").textContent = String(signals.length);
-  $("signals").innerHTML = signals.length ? signals.map(signalCard).join("") : `<div class="quiet-state"><strong>No elevated evidence signals today.</strong><span>Federal activity is still tracked below; nothing currently clears the brief threshold.</span></div>`;
+  const total = Number(state.daily.total_records || 0);
+  $("brief-summary").textContent = signals.length
+    ? `Federal agencies published ${total.toLocaleString()} items in this snapshot. FedPulse found ${signals.length} development${signals.length === 1 ? "" : "s"} that deserve a closer look.`
+    : `Federal agencies published ${total.toLocaleString()} items in this snapshot. Nothing currently clears the executive attention threshold.`;
+  $("greeting").textContent = signals.length ? `${signals.length} federal development${signals.length === 1 ? "" : "s"} worth your attention.` : "Nothing requires your attention today.";
+  $("signals").innerHTML = signals.length ? signals.map(priorityCard).join("") : `<div class="quiet-state hero-quiet"><strong>Nothing requires your attention today.</strong><span>FedPulse is still monitoring official federal activity. No current signal clears the evidence threshold for the executive brief.</span></div>`;
+}
+
+function renderWatching() {
+  const priorityIds = new Set(prioritizedSignals().slice(0, 5).map((x) => x.value.package_id || x.value.record_id));
+  const candidates = state.packages
+    .filter((p) => !priorityIds.has(p.package_id) && p.lifecycle !== "diagnostic")
+    .sort((a,b) => confidenceRank[a.confidence] - confidenceRank[b.confidence])
+    .slice(0, 8);
+  $("watch-count").textContent = String(candidates.length);
+  $("watching").innerHTML = candidates.length ? candidates.map((p) => `<article class="watch-item"><div><span class="watch-agency">${text(p.canonical_agency_name || p.coordination_agency_name || "Federal agency")}</span><strong>${text(p.label || p.direction || "Developing activity")}</strong><small>${text(p.record_count,"0")} related records · ${text(p.lifecycle || "new")}</small></div><span class="trend ${p.confidence === "high" ? "up" : "steady"}">${p.confidence === "high" ? "↑ increasing" : "→ watching"}</span></article>`).join("") : `<div class="quiet-state compact"><strong>No additional developing signals.</strong><span>The current watchlist is quiet.</span></div>`;
 }
 
 function renderDaily() {
@@ -60,17 +93,19 @@ function renderDaily() {
 
 function metricRows() {
   const out = [];
-  for (const wrapper of state.metrics) {
-    for (const item of (wrapper.items || [])) {
-      if (item.alert || item.newly_elevated) out.push({...item, metric: wrapper.metric});
-    }
-  }
+  for (const wrapper of state.metrics) for (const item of (wrapper.items || [])) if (item.alert || item.newly_elevated) out.push({...item, metric: wrapper.metric});
   return out.slice(0, 6);
+}
+
+function movementText(x) {
+  if (x.z_score != null) return "Activity is materially above this agency’s recent baseline.";
+  if (x.proposal_to_final_ratio != null) return "The mix of proposed and final actions is outside its recent pattern.";
+  return "Activity crossed a configured FedPulse threshold.";
 }
 
 function renderMetricHighlights() {
   const rows = metricRows();
-  $("metric-highlights").innerHTML = rows.length ? rows.map((x) => `<div class="movement"><div><strong>${text(x.agency || x.agency_id)}</strong><span>${text((x.metric || "metric").replaceAll("_", " "))}</span></div><b>${x.z_score != null ? `z ${text(x.z_score)}` : x.proposal_to_final_ratio != null ? `${text(x.proposal_to_final_ratio)}×` : "elevated"}</b></div>`).join("") : `<div class="quiet-state compact"><strong>No agencies outside configured thresholds.</strong><span>Supporting metrics remain available in diagnostics.</span></div>`;
+  $("metric-highlights").innerHTML = rows.length ? rows.map((x) => `<div class="movement"><div><strong>${text(x.agency || x.agency_id)}</strong><span>${text(movementText(x))}</span></div><b>${x.z_score != null ? `↑ above baseline` : x.proposal_to_final_ratio != null ? `↑ shifted` : "↑ elevated"}</b></div>`).join("") : `<div class="quiet-state compact"><strong>No agencies outside configured thresholds.</strong><span>Supporting metrics remain available below.</span></div>`;
 }
 
 function packageMatches(p) {
@@ -96,7 +131,7 @@ function renderStandalone() {
 }
 
 function renderMarc() {
-  $("marc").innerHTML = state.marc.length ? state.marc.slice(0, 10).map((m) => `<article class="card"><div class="card-top"><h3>${text(m.subject)}</h3><span class="badge ${esc(m.confidence)}">${text(m.confidence)}</span></div><p class="muted">${text(m.last_four_week_catalog_count,"0")} records · ${text(m.distinct_cataloged_dates,"0")} dates · ${text(m.distinct_canonical_agencies,"0")} agencies</p><details><summary>Catalog evidence</summary><div class="evidence">${evidenceLinks(m.evidence, 4)}</div></details></article>`).join("") : `<div class="empty">No MARC horizon topics.</div>`;
+  $("marc").innerHTML = state.marc.length ? state.marc.slice(0, 10).map((m) => `<article class="card"><div class="card-top"><h3>${text(m.subject)}</h3><span class="badge ${esc(m.confidence)}">${text(m.confidence)}</span></div><p class="muted">${text(m.last_four_week_catalog_count,"0")} records · ${text(m.distinct_cataloged_dates,"0")} dates · ${text(m.distinct_canonical_agencies,"0")} agencies</p><details><summary>Catalog evidence</summary><div class="evidence">${evidenceLinks(m.evidence, 4)}</div></details></article>`).join("") : `<div class="empty">No GPO horizon topics.</div>`;
 }
 
 function renderDiagnostics() {
@@ -130,15 +165,15 @@ async function load() {
     state.brief = brief;
     state.generation = results[0].generation;
     $("asof").textContent = `as of ${health.as_of || "—"}`;
-    $("generation").textContent = `generation ${state.generation.slice(0, 24)}`;
-    $("status").textContent = `Loaded ${health.generated_at || "snapshot"} · schema v2 · ${state.packages.length} packages`;
+    $("generation").textContent = `generation ${state.generation.slice(0, 18)}`;
+    $("status").textContent = `Last checked ${health.generated_at || "—"} · ${state.packages.length} evidence packages · official sources only`;
   } catch (error) {
     $("status").textContent = `Snapshot unavailable: ${error.message}`;
     $("freshness").className = "health-strip degraded";
     $("freshness").innerHTML = `<strong>Snapshot unavailable</strong><span>${esc(error.message)}</span>`;
     return;
   }
-  renderFreshness(); renderSignals(); renderDaily(); renderMetricHighlights(); renderPackages(); renderStandalone(); renderMarc(); renderDiagnostics();
+  renderFreshness(); renderSignals(); renderWatching(); renderDaily(); renderMetricHighlights(); renderPackages(); renderStandalone(); renderMarc(); renderDiagnostics();
 }
 
 ["agency-filter","direction-filter","sector-filter","confidence-filter","lifecycle-filter"].forEach((id) => $(id).addEventListener("input", renderPackages));
