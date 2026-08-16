@@ -1,79 +1,53 @@
 # FedPulse
 
-Evidence-ranked federal regulatory monitoring from Federal Register and GPO metadata.
+FedPulse is an evidence-ranked federal activity monitoring system. It combines Federal Register, GPO, OIRA/RegInfo, Grants.gov, SAM.gov, USAspending, and Congressional bulk data into deterministic, source-backed signals.
 
-FedPulse is deterministic, stdlib-only at runtime, and designed around auditable evidence rather than generated summaries. It turns official publication metadata into daily signals, coordinated action packages, source-health snapshots, and dashboard-ready JSON.
+## Product surfaces
 
-## v0.3 production-trust release
+- **Today** — concise executive brief of federal developments worth attention.
+- **Opportunities Today** — fresh government actions ranked against deterministic watch profiles.
+- **Act Now** — open contracts and funding where action can still affect the outcome.
+- **Market Intelligence** — awards and spending activity that reveal where demand and federal money are moving.
+- **Policy Signals** — legislation, OIRA activity, and upstream regulatory actions.
+- **Evidence Explorer** — detailed supporting records and diagnostics.
 
-This release hardens the production boundary around the existing evidence engine:
+## Opportunity ranking
 
-- R2 state restore fails closed instead of treating every error as an empty bootstrap.
-- SQLite state is validated before it can replace persisted production state.
-- State backups are retained before replacement.
-- Dashboard data is published into immutable generation-scoped KV objects.
-- A single `current.json` pointer is written last, so readers get one coherent generation.
-- The Worker and Wrangler configuration live in the repo.
-- CI validates tests, Python compilation, JSON config, dashboard JavaScript, Worker JavaScript, and shell syntax.
-- The dashboard is organized around decision-ready evidence signals instead of raw classifier diagnostics.
+FedPulse does not rank opportunities by keyword match or dollar size alone. Every surfaced item receives an explainable component score covering:
 
-## Outputs
+- freshness of the official action;
+- novelty (`first_seen`) in the FedPulse corpus;
+- profile relevance across topic, geography, NAICS, and agency;
+- multi-factor specificity;
+- deadline urgency and useful response runway;
+- commercial magnitude;
+- early-stage advantage such as forecast, Sources Sought, and presolicitation notices;
+- competition signals such as small-business and restricted set-asides;
+- actionability by event type.
 
-Every successful run publishes seven schema-v2 JSON outputs:
+Items that are both upstream and specifically matched can be labeled **early signal** and sort ahead of otherwise higher-volume generic activity. The component breakdown is retained in `opportunities_today.json` and exposed in the dashboard so every ranking remains auditable.
 
-- `daily_activity.json`
-- `packages.json`
-- `standalone.json`
-- `fr_metrics.json`
-- `marc_horizon.json`
-- `health.json`
-- `brief.json`
+## Watch profiles
 
-The Cloudflare publisher also writes immutable generation-scoped keys and advances `current.json` only after all files have been uploaded.
+Current deterministic profiles include:
 
-## Dashboard
+- Construction / AEC / Washington
+- AI / Technology
+- Business Opportunities
+- Seattle / Pacific Northwest Intelligence
 
-The dashboard is dependency-free vanilla JavaScript. It fetches schema-v2 output through the Cloudflare Worker, verifies generation consistency across all payloads, and shows:
+Profiles are plain JSON configuration—no user account or LLM is required.
 
-1. signals worth watching;
-2. today's Federal Register pulse;
-3. agencies outside baseline;
-4. coordinated evidence packages;
-5. standalone watchlist hits;
-6. emerging GPO topics;
-7. methodology and diagnostic metrics.
+## Design principles
 
-## Local validation
+1. Official-source evidence first.
+2. No required source API keys for the baseline pipeline.
+3. Separate clocks for sources with different publication cadences.
+4. Atomic, generation-based publication.
+5. Quiet states are valid output; weak evidence should not become an alert.
+6. Relevance and evidence confidence are separate concepts.
+7. Every ranking should be explainable from deterministic inputs.
 
-```bash
-PYTHONPATH=src uv run python -m unittest discover -s tests -v
-uv run python -m compileall -q src tests
-python -m json.tool src/fedpulse/config/agency_aliases.json >/dev/null
-node --check dashboard/app.js
-node --check worker/src/index.js
-bash -n scripts/nightly.sh
-```
+## Runtime
 
-## Nightly operation
-
-`.github/workflows/nightly.yml` runs the pipeline, restores state from Cloudflare R2, validates state before replacement, persists a rollback copy, publishes immutable dashboard generations to KV, and then advances `current.json`.
-
-## Cloudflare Worker
-
-The Worker is configured by `wrangler.jsonc` and serves static dashboard assets plus generation-scoped JSON outputs from the `DASHBOARD_DATA` KV binding.
-
-Deploy with:
-
-```bash
-npx wrangler deploy
-```
-
-## v0.4 direction
-
-The next product stage is Regulations.gov docket lifecycle enrichment. See:
-
-```text
-docs/superpowers/specs/2026-08-16-fedpulse-v0.4-regulationsgov-lifecycle.md
-```
-
-The v0.4 goal is to turn Federal Register records and packages into docket-centered lifecycle signals: proposal open, comment window closed, agency review activity, final rule published, implementation follow-up, or withdrawal/termination.
+The core pipeline is stdlib-only Python + SQLite. The dashboard is dependency-free HTML/CSS/JavaScript served by Cloudflare Workers Static Assets, with generated snapshots stored in Cloudflare KV.
