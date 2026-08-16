@@ -60,6 +60,7 @@ jobs:
       - name: Run nightly pipeline
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGULATIONS_GOV_API_KEY: ${{ secrets.REGULATIONS_GOV_API_KEY }}
         run: |
           PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 \
             --db data/fedpulse.db --out data/outputs
