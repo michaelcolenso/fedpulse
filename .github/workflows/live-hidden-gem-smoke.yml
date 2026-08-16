@@ -1,0 +1,40 @@
+name: Live Hidden Gem Smoke
+on:
+  pull_request:
+    paths:
+      - 'src/fedpulse/**'
+      - 'tests/test_hidden_gems.py'
+      - '.github/workflows/live-hidden-gem-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  live-ranking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Run live zero-key corpus and rank
+        env:
+          PYTHONPATH: src
+        run: |
+          uv run python - <<'PY'
+          import datetime as dt, json, tempfile
+          from pathlib import Path
+          from fedpulse import db, keyless_sources
+          from fedpulse.opportunities import rank_all_profiles
+          from fedpulse.hidden_gems import detect_hidden_gems
+          root=Path(tempfile.mkdtemp()); conn=db.connect(root/'live.db'); db.init_db(conn)
+          results=keyless_sources.sync_all(conn,include_bulk=True)
+          as_of=dt.datetime.now(dt.timezone.utc).date().isoformat()
+          by_profile,lanes,items=rank_all_profiles(conn,as_of,50)
+          gems=[]
+          for profile in ('default','ai_technology','business_opportunities','pnw_intelligence'):
+              for item in detect_hidden_gems(conn,as_of,profile,10):
+                  gems.append({**item,'profile':profile})
+          gems.sort(key=lambda x:(-x['hidden_gem_score'],-x['score']))
+          print('SOURCE_RESULTS='+json.dumps(results,default=str,sort_keys=True))
+          print('TOP_EARLY='+json.dumps([x for x in items if x.get('edge')=='early'][:15],default=str,sort_keys=True))
+          print('TOP_ACT_NOW='+json.dumps(lanes.get('act_now',[])[:15],default=str,sort_keys=True))
+          print('TOP_HIDDEN_GEMS='+json.dumps(gems[:20],default=str,sort_keys=True))
+          PY
