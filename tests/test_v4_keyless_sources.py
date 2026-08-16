@@ -35,7 +35,7 @@ class TestV4KeylessSources(unittest.TestCase):
     def test_grants_enhanced_extract(self):
         html = '<a href="https://example.gov/GrantsDBExtract20260815v2.zip">old</a><a href="https://example.gov/GrantsDBExtract20260816v2.zip">new</a>'
         self.assertIn("20260816", discover_latest_extract(html))
-        xml = b"""<Grants><Opportunity><OpportunityID>123</OpportunityID><OpportunityNumber>ABC-1</OpportunityNumber><OpportunityTitle>Grid modernization</OpportunityTitle><AgencyName>DOE</AgencyName><ForecastedPostDate>2026-10-01</ForecastedPostDate><EstimatedTotalProgramFunding>450000000</EstimatedTotalProgramFunding><CFDANumbers>81.001</CFDANumbers></Opportunity></Grants>"""
+        xml = b"""<Grants><OpportunityForecastDetail_1_0><OpportunityID>123</OpportunityID><OpportunityNumber>ABC-1</OpportunityNumber><OpportunityTitle>Grid modernization</OpportunityTitle><AgencyName>DOE</AgencyName><ForecastedPostDate>2026-10-01</ForecastedPostDate><EstimatedTotalProgramFunding>450000000</EstimatedTotalProgramFunding><CFDANumbers>81.001</CFDANumbers></OpportunityForecastDetail_1_0></Grants>"""
         buf = io.BytesIO()
         with zipfile.ZipFile(buf,"w") as zf: zf.writestr("GrantsDBExtract.xml", xml)
         events = parse_extract(buf.getvalue()); self.assertEqual(len(events), 1)
