@@ -18,12 +18,35 @@ def fetch_bytes(url: str = BULK_URL, timeout: int = 240) -> bytes:
         return response.read()
 
 
+def _norm_key(value: object) -> str:
+    return str(value or "").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+
+
 def _pick(row: dict, *names: str) -> str | None:
-    lowered = {str(k).strip().lower().replace(" ", "").replace("_", ""): v for k, v in row.items()}
+    lowered = {_norm_key(k): v for k, v in row.items()}
     for name in names:
-        value = lowered.get(name.lower().replace(" ", "").replace("_", ""))
+        value = lowered.get(_norm_key(name))
         if value is not None and str(value).strip(): return str(value).strip()
     return None
+
+
+def _scoring_row(row: dict) -> dict:
+    """Remove contracting-office geography while preserving place of performance.
+
+    SAM's bulk extract contains both office-address location fields and Pop*/place-of-
+    performance fields. Generic City/State/Address values describe the contracting
+    office and must not be treated as project geography by downstream ranking.
+    """
+    out = {}
+    location_tokens = ("state", "city", "county", "location", "place", "address", "performance", "worksite")
+    for key, value in row.items():
+        norm = _norm_key(key)
+        is_locationish = any(token in norm for token in location_tokens)
+        is_performance = norm.startswith("pop") or "placeofperformance" in norm or "performance" in norm
+        if is_locationish and not is_performance:
+            continue
+        out[key] = value
+    return out
 
 
 def _amount(value: str | None) -> float | None:
@@ -60,7 +83,7 @@ def parse_csv(body: bytes, *, max_rows: int | None = None) -> list[GovernmentEve
             source="sam_opportunity", source_id=notice_id, kind="contract_opportunity", stage=notice_type,
             title=title, agency=agency, event_date=posted, amount=amount,
             currency="USD" if amount is not None else None, official_url=link,
-            identifiers=tuple(identifiers), payload={"source_sha256": digest, "row": row}, content_sha256=digest,
+            identifiers=tuple(identifiers), payload={"source_sha256": digest, "row": _scoring_row(row)}, content_sha256=digest,
         ))
     return out
 
