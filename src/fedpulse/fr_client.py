@@ -15,8 +15,8 @@ from collections.abc import Iterator
 
 from .taxonomy import canonicalize_agency
 BASE = "https://www.federalregister.gov/api/v1"
-USER_AGENT = "FedPulse/0.1 (regulatory metadata index; contact: michael@fedpulse.local)"
-SLEEP = 0.4  # seconds between requests — be a good citizen
+USER_AGENT = "FedPulse/0.4 (public federal government monitoring; github.com/michaelcolenso/fedpulse)"
+SLEEP = 0.4
 
 FIELDS = [
     "document_number",
@@ -32,6 +32,7 @@ FIELDS = [
     "action",
     "significant",
     "docket_ids",
+    "regulation_id_numbers",
 ]
 
 
@@ -40,7 +41,6 @@ class FRAPIError(RuntimeError):
 
 
 def _get(path: str, params: dict) -> dict:
-    # doseq=True: repeat keys for list values (e.g. fields[]=a&fields[]=b)
     qs = urllib.parse.urlencode(params, doseq=True)
     url = f"{BASE}{path}?{qs}"
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
@@ -49,11 +49,6 @@ def _get(path: str, params: dict) -> dict:
 
 
 def fetch_range(start: str, end: str, per_page: int = 200) -> list[dict]:
-    """Fetch all FR documents with publication_date in [start, end] (ISO dates).
-
-    FR API caps per_page at 200 and total_pages at 50 (10k docs/query max);
-    callers slice by month so that cap is never hit.
-    """
     out: list[dict] = []
     page = 1
     while True:
@@ -68,82 +63,53 @@ def fetch_range(start: str, end: str, per_page: int = 200) -> list[dict]:
         results = data.get("results", [])
         out.extend(results)
         total_pages = data.get("total_pages", 1)
-        if page >= total_pages or page >= 50:
-            break
-        page += 1
-        time.sleep(SLEEP)
+        if page >= total_pages or page >= 50: break
+        page += 1; time.sleep(SLEEP)
     return out
 
 
 def pull_days(days: int = 3) -> list[dict]:
-    """Pull the last N days of FR documents (inclusive of today)."""
-    today = dt.date.today()
-    start = (today - dt.timedelta(days=days - 1)).isoformat()
+    today = dt.date.today(); start = (today - dt.timedelta(days=days - 1)).isoformat()
     return fetch_range(start, today.isoformat())
 
 
 def backfill(start: str, end: str | None = None) -> Iterator[list[dict]]:
-    """Yield FR documents month-by-month from start to end (ISO dates).
-
-    Generator: yields one month's docs at a time so callers can commit and
-    free memory incrementally instead of buffering the whole history.
-    """
-    if end is None:
-        end = dt.date.today().isoformat()
-    cur = dt.date.fromisoformat(start)
-    end_date = dt.date.fromisoformat(end)
+    if end is None: end = dt.date.today().isoformat()
+    cur = dt.date.fromisoformat(start); end_date = dt.date.fromisoformat(end)
     while cur <= end_date:
-        month_end = (cur.replace(day=28) + dt.timedelta(days=4))
-        month_end = month_end.replace(day=1) - dt.timedelta(days=1)
-        if month_end > end_date:
-            month_end = end_date
+        month_end = (cur.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)
+        if month_end > end_date: month_end = end_date
         chunk = fetch_range(cur.isoformat(), month_end.isoformat())
         print(f"  {cur.isoformat()}..{month_end.isoformat()}: {len(chunk)} docs", flush=True)
-        yield chunk
-        cur = month_end + dt.timedelta(days=1)
-        time.sleep(SLEEP)
+        yield chunk; cur = month_end + dt.timedelta(days=1); time.sleep(SLEEP)
 
 
 def to_record(doc: dict) -> dict:
-    """Map an FR API document to FedPulse's records-table dict."""
     agencies = doc.get("agencies") or []
-    # FR lists parent agencies first; prefer the most specific child (has a parent_id)
     children = [a for a in agencies if a.get("parent_id")]
     chosen = children[0] if children else (agencies[0] if agencies else None)
     agency = chosen.get("name") if chosen else None
     slug = chosen.get("slug") if chosen else None
     doc_type = doc.get("type")
-    # normalize type to snake-case tokens used by RCR
-    if doc_type:
-        doc_type = doc_type.strip().lower().replace(" ", "_").replace("-", "_")
+    if doc_type: doc_type = doc_type.strip().lower().replace(" ", "_").replace("-", "_")
     topics = [t for t in (doc.get("topics") or []) if t]
-    abstract = doc.get("abstract") or ""
-    action = doc.get("action") or ""
-    doc_number = doc.get("document_number") or ""  # None → "" so malformed ids are detectable
+    abstract = doc.get("abstract") or ""; action = doc.get("action") or ""; doc_number = doc.get("document_number") or ""
     raw = {
         "citation": doc.get("citation"),
         "abstract": abstract[:500],
         "action": action[:500],
         "significant": doc.get("significant"),
         "docket_ids": doc.get("docket_ids"),
+        "regulation_id_numbers": doc.get("regulation_id_numbers") or [],
         "raw_text_url": doc.get("raw_text_url"),
         "agencies": agencies,
     }
     identity = canonicalize_agency("fr", agency or "", raw)
     return {
-        "id": f"fr:{doc_number}",
-        "source": "fr",
-        "title": doc.get("title"),
-        "agency": agency,
-        "agency_slug": slug,
-        "sudoc": None,
-        "sudoc_stem": None,
-        "doc_type": doc_type,
-        "publication_date": doc.get("publication_date"),
-        "cataloged_date": doc.get("publication_date"),
-        "url": doc.get("html_url"),
-        "subjects": topics,
-        "canonical_agency_id": identity.canonical_id,
-        "canonical_agency_name": identity.canonical_name,
+        "id": f"fr:{doc_number}", "source": "fr", "title": doc.get("title"), "agency": agency,
+        "agency_slug": slug, "sudoc": None, "sudoc_stem": None, "doc_type": doc_type,
+        "publication_date": doc.get("publication_date"), "cataloged_date": doc.get("publication_date"),
+        "url": doc.get("html_url"), "subjects": topics,
+        "canonical_agency_id": identity.canonical_id, "canonical_agency_name": identity.canonical_name,
         "raw_json": raw,
     }
