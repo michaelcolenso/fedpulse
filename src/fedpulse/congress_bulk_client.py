@@ -39,7 +39,8 @@ def _all_text(node: ET.Element, suffix: str) -> list[str]:
 
 def parse_bill(xml_bytes: bytes, url: str) -> GovernmentEvent | None:
     root = ET.fromstring(xml_bytes)
-    bill = root.find(".//bill") or root
+    found_bill = root.find(".//bill")
+    bill = found_bill if found_bill is not None else root
     congress = _text(bill, "congress") or next(iter(_all_text(bill, "congress")), None)
     bill_type = _text(bill, "type") or next(iter(_all_text(bill, "type")), None)
     number = _text(bill, "number") or next(iter(_all_text(bill, "number")), None)
