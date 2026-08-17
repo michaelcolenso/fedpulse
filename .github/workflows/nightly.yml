@@ -68,6 +68,43 @@ jobs:
           PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 \
             --db data/fedpulse.db --out data/outputs
 
+      - name: Prepare changed semantic embeddings
+        id: semantic
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=src uv run python scripts/bootstrap_vectorize.py \
+            --db data/fedpulse.db \
+            --out /tmp/fedpulse-vectors.ndjson \
+            --manifest /tmp/fedpulse-embedding-manifest.ndjson \
+            --stats /tmp/fedpulse-embedding-stats.json \
+            --profile default \
+            --limit 500 \
+            --incremental \
+            --skip-query
+          changed=$(python -c 'import json; print(json.load(open("/tmp/fedpulse-embedding-stats.json"))["documents"])')
+          skipped=$(python -c 'import json; print(json.load(open("/tmp/fedpulse-embedding-stats.json"))["skipped"])')
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "Semantic embedding delta: $changed changed/new, $skipped unchanged."
+
+      - name: Upsert changed production vectors
+        if: steps.semantic.outputs.changed != '0'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          npx --yes wrangler@4 vectorize upsert fedpulse-opportunities-v1 \
+            --file=/tmp/fedpulse-vectors.ndjson \
+            --batch-size=500
+
+      - name: Commit successful embedding fingerprints
+        if: steps.semantic.outputs.changed != '0'
+        run: |
+          PYTHONPATH=src uv run python scripts/bootstrap_vectorize.py \
+            --db data/fedpulse.db \
+            --commit-manifest /tmp/fedpulse-embedding-manifest.ndjson
+
       - name: Validate generated state before persistence
         run: |
           if [ -f /tmp/fedpulse-baseline.json ]; then
