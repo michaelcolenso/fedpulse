@@ -1,0 +1,39 @@
+name: FedPulse dashboard fast repair (one-off)
+
+on:
+  push:
+    paths:
+      - .github/workflows/repair-dashboard-fast-once.yml
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: 4e921a01da1f55b0ddb32bb38a5524ce
+  CLOUDFLARE_KV_NAMESPACE_ID: 4df2d8d44f8d495e810fc3b888a4885b
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Download last successfully generated dashboard snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: fedpulse-outputs-32026025378
+          path: data/outputs-flat
+          repository: michaelcolenso/fedpulse
+          run-id: 32026025378
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish complete atomic generation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          PYTHONPATH=src uv run python scripts/publish_dashboard.py data/outputs-flat/current --legacy-flat
+      - name: Verify all live feeds
+        run: |
+          PYTHONPATH=src uv run python scripts/verify_live_dashboard.py \
+            https://fedpulse-dashboard.aged-morning-c8e4.workers.dev
