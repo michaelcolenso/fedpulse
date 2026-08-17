@@ -59,6 +59,22 @@ def changed_states(
     ]
 
 
+def apply_update_budget(
+    states: Iterable[EmbeddingState],
+    max_updates: int | None,
+) -> tuple[list[EmbeddingState], int]:
+    """Bound per-run embedding work without limiting corpus eligibility.
+
+    ``max_updates`` is a throughput guard only. All eligible records are still
+    fingerprinted and compared each run; overflow remains uncommitted and therefore
+    stays in the changed backlog for the next run.
+    """
+    rows = list(states)
+    if not max_updates or max_updates <= 0 or len(rows) <= max_updates:
+        return rows, 0
+    return rows[:max_updates], len(rows) - max_updates
+
+
 def commit_states(
     conn: sqlite3.Connection,
     states: Iterable[EmbeddingState],

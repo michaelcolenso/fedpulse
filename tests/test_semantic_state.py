@@ -5,6 +5,7 @@ import unittest
 
 from fedpulse.semantic_state import (
     EmbeddingState,
+    apply_update_budget,
     changed_states,
     commit_states,
     content_fingerprint,
@@ -69,6 +70,32 @@ class SemanticStateTests(unittest.TestCase):
         )
         updated = EmbeddingState("evt-1", "hash-a", "model-b")
         self.assertEqual(changed_states(self.conn, [updated]), [updated])
+
+    def test_update_budget_defers_overflow_without_dropping_it(self) -> None:
+        states = [
+            EmbeddingState(f"evt-{index}", f"hash-{index}", "model-a")
+            for index in range(5)
+        ]
+        scheduled, deferred = apply_update_budget(states, 2)
+        self.assertEqual([state.event_id for state in scheduled], ["evt-0", "evt-1"])
+        self.assertEqual(deferred, 3)
+
+        # Only successful scheduled rows are committed; overflow remains changed.
+        commit_states(self.conn, scheduled, embedded_at="2026-08-17T00:00:00+00:00")
+        remaining = changed_states(self.conn, states)
+        self.assertEqual(
+            [state.event_id for state in remaining],
+            ["evt-2", "evt-3", "evt-4"],
+        )
+
+    def test_zero_update_budget_means_unbounded(self) -> None:
+        states = [
+            EmbeddingState(f"evt-{index}", f"hash-{index}", "model-a")
+            for index in range(3)
+        ]
+        scheduled, deferred = apply_update_budget(states, 0)
+        self.assertEqual(scheduled, states)
+        self.assertEqual(deferred, 0)
 
 
 if __name__ == "__main__":

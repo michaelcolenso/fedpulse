@@ -21,6 +21,7 @@ from fedpulse.canonical_text import canonical_event_text, canonical_profile_text
 from fedpulse.opportunities import load_profile
 from fedpulse.semantic_state import (
     EmbeddingState,
+    apply_update_budget,
     changed_states,
     commit_states,
     content_fingerprint,
@@ -50,15 +51,22 @@ def embed(account: str, token: str, texts: list[str]) -> list[list[float]]:
     return vectors
 
 
-def rows_for_bootstrap(conn: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
-    return conn.execute(
-        """SELECT event_id,source,kind,stage,title,agency,event_date,amount,currency,official_url,payload_json
-           FROM government_events
-           WHERE kind IN ('contract_opportunity','funding_opportunity')
-           ORDER BY COALESCE(event_date,'') DESC, last_seen DESC
-           LIMIT ?""",
-        (limit,),
-    ).fetchall()
+def rows_for_bootstrap(
+    conn: sqlite3.Connection,
+    limit: int | None = None,
+) -> list[sqlite3.Row]:
+    """Return the eligible semantic corpus, newest first.
+
+    ``limit`` exists for smoke tests and explicit operator sampling. A missing/zero
+    limit means the full eligible SAM + Grants opportunity corpus.
+    """
+    sql = """SELECT event_id,source,kind,stage,title,agency,event_date,amount,currency,official_url,payload_json
+             FROM government_events
+             WHERE kind IN ('contract_opportunity','funding_opportunity')
+             ORDER BY COALESCE(event_date,'') DESC, last_seen DESC"""
+    if limit and limit > 0:
+        return conn.execute(sql + " LIMIT ?", (limit,)).fetchall()
+    return conn.execute(sql).fetchall()
 
 
 def _read_manifest(path: Path) -> list[EmbeddingState]:
@@ -96,7 +104,18 @@ def main() -> None:
     ap.add_argument("--db", required=True)
     ap.add_argument("--out")
     ap.add_argument("--profile", default="default")
-    ap.add_argument("--limit", type=int, default=500)
+    ap.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Optional corpus/sample limit; 0 means all eligible opportunities.",
+    )
+    ap.add_argument(
+        "--max-updates",
+        type=int,
+        default=0,
+        help="Throughput cap for changed/new embeddings; 0 means no cap.",
+    )
     ap.add_argument("--incremental", action="store_true")
     ap.add_argument("--manifest")
     ap.add_argument("--stats")
@@ -134,10 +153,27 @@ def main() -> None:
             )
             docs.append((item, text, state))
 
-    considered = len(docs)
+    eligible = len(docs)
+    changed_ids: set[str]
+    changed_total: int
+    deferred = 0
     if args.incremental:
-        changed = {state.event_id for state in changed_states(conn, [state for _, _, state in docs])}
-        docs = [doc for doc in docs if doc[2].event_id in changed]
+        changed = changed_states(conn, [state for _, _, state in docs])
+        changed_total = len(changed)
+        scheduled, deferred = apply_update_budget(changed, args.max_updates)
+        changed_ids = {state.event_id for state in scheduled}
+        docs = [doc for doc in docs if doc[2].event_id in changed_ids]
+    else:
+        changed_total = len(docs)
+        if args.max_updates and args.max_updates > 0:
+            scheduled_ids = {
+                state.event_id
+                for state in apply_update_budget(
+                    [state for _, _, state in docs], args.max_updates
+                )[0]
+            }
+            deferred = max(0, len(docs) - len(scheduled_ids))
+            docs = [doc for doc in docs if doc[2].event_id in scheduled_ids]
 
     vector_lines: list[str] = []
     manifest_lines: list[str] = []
@@ -188,12 +224,16 @@ def main() -> None:
         )
 
     stats = {
-        "considered": considered,
+        "eligible": eligible,
+        "changed_total": changed_total,
         "documents": len(docs),
-        "skipped": considered - len(docs),
+        "unchanged": eligible - changed_total,
+        "deferred": deferred,
         "profile": args.profile,
         "model": MODEL,
         "incremental": args.incremental,
+        "corpus_limit": args.limit,
+        "max_updates": args.max_updates,
     }
     if args.stats:
         stats_path = Path(args.stats)
