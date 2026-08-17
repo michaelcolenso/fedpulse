@@ -5,8 +5,11 @@ truth layer; semantic and optional AI signals only affect ordering and explanati
 """
 from __future__ import annotations
 
+import json
 import os
+import tempfile
 from collections import defaultdict
+from pathlib import Path
 
 from .ai_reranker import rerank as ai_rerank
 from .opportunities import load_profiles
@@ -34,7 +37,6 @@ def _evidence_rows(item: dict) -> list[dict]:
             rows.append({"type": "geography", "label": "Geography", "value": reason.split(":", 1)[1].strip()})
         elif reason.startswith("agency:"):
             rows.append({"type": "agency", "label": "Agency match", "value": reason.split(":", 1)[1].strip()})
-    # Keep the compact UI useful rather than exhaustive.
     seen = set()
     deduped = []
     for row in rows:
@@ -69,8 +71,8 @@ def enrich_opportunities_payload(conn, payload: dict) -> dict:
     semantic_matches: dict[str, dict[str, float]] = defaultdict(dict)
     ai_by_event: dict[str, dict] = {}
 
-    # Work from the already deterministic-eligible profile sets. Semantic ranking may
-    # reorder those candidates but may not create facts or bypass hard eligibility.
+    # Semantic/AI stages may reorder deterministic-eligible candidates, but may not
+    # bypass hard source/geography/deadline eligibility.
     for profile_name, profile_block in (payload.get("profiles") or {}).items():
         profile = profiles.get(profile_name)
         if not profile:
@@ -133,3 +135,30 @@ def enrich_opportunities_payload(conn, payload: dict) -> dict:
         "ai_role": "evidence-bound analyst and skeptic" if ai_enabled else None,
     }
     return payload
+
+
+def publish_enriched_opportunities(conn, payload: dict, out_dir: Path) -> dict:
+    """Enrich and atomically replace both normal/current opportunity outputs."""
+    enriched = enrich_opportunities_payload(conn, payload)
+    out_dir = Path(out_dir)
+    targets = [out_dir / "opportunities_today.json"]
+    current = out_dir / "current"
+    if current.exists():
+        targets.append(current / "opportunities_today.json")
+    for target in targets:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(enriched, fh, ensure_ascii=False, sort_keys=True, indent=2)
+                fh.write("\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, target)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+    return enriched
