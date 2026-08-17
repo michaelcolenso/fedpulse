@@ -1,4 +1,5 @@
 name: FedPulse nightly pipeline
+# One-time dashboard v2 production generation trigger.
 
 on:
   push:
@@ -85,11 +86,10 @@ jobs:
             --incremental \
             --skip-query
           changed=$(python -c 'import json; print(json.load(open("/tmp/fedpulse-embedding-stats.json"))["documents"])')
-          eligible=$(python -c 'import json; print(json.load(open("/tmp/fedpulse-embedding-stats.json"))["eligible"])')
-          unchanged=$(python -c 'import json; print(json.load(open("/tmp/fedpulse-embedding-stats.json"))["unchanged"])')
-          deferred=$(python -c 'import json; print(json.load(open("/tmp/fedpulse-embedding-stats.json"))["deferred"])')
+          skipped=$(python -c 'import json; print(json.load(open("/tmp/fedpulse-embedding-stats.json"))["skipped"])')
+          deferred=$(python -c 'import json; print(json.load(open("/tmp/fedpulse-embedding-stats.json")).get("deferred", 0))')
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
-          echo "Semantic corpus: $eligible eligible; $changed scheduled; $unchanged unchanged; $deferred deferred."
+          echo "Semantic embedding delta: $changed scheduled, $skipped unchanged, $deferred deferred."
 
       - name: Upsert changed production vectors
         if: steps.semantic.outputs.changed != '0'
