@@ -26,6 +26,15 @@ function jsonResponse(body, status = 200, extraHeaders = {}) {
   });
 }
 
+async function legacyFallback(env, name, pointer) {
+  const legacy = await env.DASHBOARD_DATA.get(name);
+  if (legacy === null) return null;
+  return jsonResponse(legacy, 200, {
+    "x-fedpulse-generation": "legacy-fallback",
+    "x-fedpulse-pointer-generation": pointer?.generation || "none",
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -52,14 +61,23 @@ export default {
       if (value !== null) {
         return jsonResponse(value, 200, { "x-fedpulse-generation": pointer.generation });
       }
-      console.error(JSON.stringify({ event: "missing_generation_object", generation: pointer.generation, name }));
-      return jsonResponse(JSON.stringify({ error: "incomplete_generation", generation: pointer.generation }), 503);
+
+      const declared = Boolean(pointer?.files && Object.prototype.hasOwnProperty.call(pointer.files, name));
+      if (!declared) {
+        // A static dashboard release can briefly lead the data schema. During that
+        // transition only, an older flat key is an acceptable compatibility source.
+        const fallback = await legacyFallback(env, name, pointer);
+        if (fallback) return fallback;
+      }
+
+      // If the manifest says the object exists but KV cannot read it, the generation
+      // is genuinely incomplete. Never hide that corruption behind stale data.
+      console.error(JSON.stringify({ event: "missing_generation_object", generation: pointer.generation, name, declared }));
+      return jsonResponse(JSON.stringify({ error: "incomplete_generation", generation: pointer.generation, name }), 503);
     }
 
-    const legacy = await env.DASHBOARD_DATA.get(name);
-    if (legacy !== null) {
-      return jsonResponse(legacy, 200, { "x-fedpulse-generation": "legacy" });
-    }
+    const fallback = await legacyFallback(env, name, pointer);
+    if (fallback) return fallback;
     return jsonResponse(JSON.stringify({ error: "snapshot_unavailable" }), 503);
   },
 };
