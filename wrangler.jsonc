@@ -8,12 +8,21 @@
   "assets": {
     "directory": "./dashboard",
     "binding": "ASSETS",
-    "run_worker_first": ["/data/outputs/current/*"]
+    "run_worker_first": ["/data/outputs/current/*", "/internal/semantic/*"]
   },
   "kv_namespaces": [
     {
       "binding": "DASHBOARD_DATA",
       "id": "4df2d8d44f8d495e810fc3b888a4885b"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "vectorize": [
+    {
+      "binding": "OPPORTUNITY_VECTORS",
+      "index_name": "fedpulse-opportunities-v1"
     }
   ],
   "observability": {

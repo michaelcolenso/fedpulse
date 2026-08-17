@@ -1,4 +1,7 @@
+import { handleSemantic } from "./semantic.js";
+
 const DATA_PREFIX = "/data/outputs/current/";
+const SEMANTIC_PREFIX = "/internal/semantic/";
 const ALLOWED = new Set([
   "daily_activity.json",
   "packages.json",
@@ -7,6 +10,8 @@ const ALLOWED = new Set([
   "marc_horizon.json",
   "health.json",
   "brief.json",
+  "opportunities_today.json",
+  "hidden_gems.json",
 ]);
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {
@@ -24,6 +29,9 @@ function jsonResponse(body, status = 200, extraHeaders = {}) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith(SEMANTIC_PREFIX)) {
+      return handleSemantic(request, env, url.pathname);
+    }
     if (!url.pathname.startsWith(DATA_PREFIX)) {
       return env.ASSETS.fetch(request);
     }
@@ -44,7 +52,6 @@ export default {
       return jsonResponse(JSON.stringify({ error: "incomplete_generation", generation: pointer.generation }), 503);
     }
 
-    // Migration fallback for deployments created before generation pointers existed.
     const legacy = await env.DASHBOARD_DATA.get(name);
     if (legacy !== null) {
       return jsonResponse(legacy, 200, { "x-fedpulse-generation": "legacy" });
