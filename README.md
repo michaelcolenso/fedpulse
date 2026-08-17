@@ -1,243 +1,162 @@
 # FedPulse
 
-> **Federal activity is public. Understanding what matters, what changed, and what to do about it is not.**
+> **Federal activity is public. Knowing what matters is not.**
 
-FedPulse turns the federal government's scattered public records into an evidence-backed intelligence feed for people who need to know **what is forming, what just opened, where money is moving, and which policy changes may matter next**.
+FedPulse turns scattered federal records into an evidence-backed intelligence feed.
 
-Instead of making you search the Federal Register, SAM.gov, Grants.gov, USAspending, RegInfo, GovInfo, and congressional data separately, FedPulse watches those systems together, preserves the official evidence, connects records when the identifiers support it, and ranks the developments most likely to deserve attention.
+It watches official sources across regulation, legislation, grants, procurement, and spending, then helps answer:
 
-It is built around one simple workflow:
+- What changed?
+- What can I act on now?
+- What is forming early?
+- Where is federal money moving?
+- Why is this relevant?
+- What official evidence supports it?
 
 ```text
-see what changed → understand why it matters → inspect the evidence → decide whether to act
+see what changed → understand why it matters → inspect the evidence → act
 ```
 
-FedPulse is not a generic government search engine, an AI news summarizer, or a black-box prediction system. It is a **government-action intelligence layer**: source-backed, explainable, and designed to surface signal before it disappears into the volume of federal publishing.
+FedPulse is not a generic search engine, an AI summary feed, or a black-box prediction system. It is a government-action intelligence layer built to reduce noise and preserve evidence.
 
----
-
-## What FedPulse helps you see
-
-The federal government leaves traces before, during, and after consequential action.
-
-A rule may appear in the Unified Agenda before it reaches OIRA. An OIRA review can attract stakeholder meetings before a Federal Register publication. A grant can move from forecast to open opportunity. A procurement can appear as Sources Sought or presolicitation before a formal solicitation. USAspending then shows where federal dollars actually landed.
-
-FedPulse puts those traces into one system.
-
-It is designed to answer questions such as:
-
-- **What can I act on right now?** Which contracts and grants are open, relevant, realistically actionable, and approaching a meaningful deadline?
-- **What is appearing early?** Which forecasts, Sources Sought notices, presolicitations, OIRA reviews, or stakeholder meetings deserve attention before the obvious public milestone?
-- **Where is government demand moving?** Which agencies, categories, geographies, and markets are seeing new opportunities or award activity?
-- **What changed in policy?** Which legislative and regulatory actions are advancing, and what official records support that conclusion?
-- **What looks unusually interesting?** Which opportunities combine strong fit, early timing, specificity, limited competition, or unusual buying patterns?
-- **What happened after the opportunity?** Where possible, can a solicitation, grant program, rulemaking, or bill be followed into later stages such as awards or implementation?
-- **Why is this item on my screen?** What facts, identifiers, timing, and scoring components caused FedPulse to surface it?
-
-The goal is not more federal data. The goal is **decision compression**.
-
----
-
-## The product surfaces
+## What you get
 
 ### Today
-
-A compact executive brief of federal developments worth attention.
-
-This is the front door: the smallest useful set of signals from a much larger evidence corpus.
+A short brief of the federal developments most worth attention.
 
 ### Act Now
+Open contracts and grants where action can still affect the outcome.
 
-Open contracts and funding opportunities where a near-term action can still change the outcome.
-
-Examples include:
-
-- SAM.gov solicitations
-- Sources Sought notices
+Examples:
+- SAM solicitations
+- Sources Sought
 - presolicitations
 - Grants.gov forecasts and open opportunities
-- set-aside opportunities
-- geographically relevant procurements
+- set-asides
 - opportunities with useful response runway
 
 ### Market Intelligence
-
-Evidence that federal demand, spending, or buying behavior is moving.
-
-This includes award activity, agency/category movement, and other signals that matter even when there is nothing to bid on today.
+Signals showing where government demand and spending are moving.
 
 ### Policy Signals
-
-Upstream government activity that may reshape a market, compliance obligation, funding environment, or procurement landscape.
-
-Examples include:
-
-- congressional activity
-- Unified Agenda actions
-- OIRA review activity
-- EO 12866 stakeholder meetings
-- Federal Register actions
+Legislative, regulatory, OIRA, and Federal Register activity that may change a market, funding environment, or compliance landscape.
 
 ### Hidden Gems
-
-A deliberately selective view for opportunities that are not merely relevant, but **unusually easy to overlook**.
-
-FedPulse looks for combinations such as:
-
-- early procurement stage + strong profile fit
-- rare agency × NAICS combinations
-- first-seen agency × geography × category combinations
-- restricted or limited competition
-- unusually specific local fit
-- recent acceleration in agency buying activity
-- obscure titles whose underlying description reveals a much better opportunity than the headline suggests
-
-A Hidden Gem must still survive hard evidence checks. “Interesting” is not allowed to substitute for “true.”
+Unusually relevant opportunities that are easy to miss because of obscure titles, early-stage notices, narrow fit, limited competition, or unusual buying patterns.
 
 ### Evidence Explorer
+The source records, identifiers, timestamps, scoring reasons, and official links behind every surfaced item.
 
-The audit trail behind the intelligence.
+## Sources
 
-FedPulse preserves source records, identifiers, lifecycle stages, scoring reasons, timestamps, and official links so a recommendation can be inspected rather than trusted blindly.
+FedPulse treats each federal source as a separate sensor with its own meaning and timing.
 
----
+| Source | What it tells you |
+|---|---|
+| Federal Register | Formal regulatory actions and notices |
+| RegInfo / OIRA | Unified Agenda, review activity, stakeholder meetings |
+| Grants.gov | Forecast and open funding opportunities |
+| SAM.gov | Contract opportunities and procurement stages |
+| USAspending | Where federal money actually went |
+| GovInfo / Congressional Bill Status | Legislative activity and official publications |
+| GPO catalog / MARC | Broader federal publication trends |
 
-## One government, many source systems
+Core operation uses public machine-readable data and does not require source API keys.
 
-FedPulse treats each source as a different sensor. It does **not** pretend they all mean the same thing or run on the same clock.
+## How FedPulse models government action
 
-| Source | What it contributes | Why it matters |
-|---|---|---|
-| **Federal Register** | Proposed/final rules, notices, agency actions | The formal public record of regulatory action |
-| **RegInfo / OIRA** | Unified Agenda, OIRA reviews, EO 12866 meetings | Earlier visibility into regulatory formation and stakeholder activity |
-| **Grants.gov** | Forecast and posted funding opportunities | What agencies are preparing to fund and what is open now |
-| **SAM.gov** | Contract opportunities, Sources Sought, presolicitations, solicitations | What the government is preparing to buy |
-| **USAspending** | Award and transaction activity | Where federal money actually went |
-| **GovInfo / GPO** | Congressional and government publication data | Official legislative and documentary context |
-| **Congressional Bill Status** | Bill lifecycle and latest actions | Policy formation before agency implementation |
-| **GPO catalog / MARC** | Broader publication horizon signals | Topic and publication activity outside the daily action feeds |
-
-The baseline source architecture is intentionally built around public, machine-readable federal data and does not require source API keys for core operation.
-
----
-
-## From documents to government actions
-
-FedPulse does not flatten every source into one giant ambiguous table.
-
-The core model is an evidence graph built from three primitives.
+FedPulse keeps source records intact and connects them only when the evidence supports it.
 
 ### Events
-
-An event is one observed action from one official source:
+One observed action from one official source, such as:
 
 ```text
 OIRA review
-Federal Register publication
+Federal Register rule
 SAM solicitation
 Grants.gov opportunity
 USAspending award
-congressional bill update
-...
+bill update
 ```
 
-Each event keeps its original source-specific payload and provenance.
-
 ### Identifiers
-
-FedPulse extracts typed identifiers such as:
+Typed identifiers such as:
 
 ```text
 RIN
 Federal Register document number
 bill / public law
-Grants opportunity number
+grant opportunity number
 SAM notice ID
 solicitation number
 award ID
 NAICS
-Assistance Listing
 ```
 
-Those identifiers are not treated as interchangeable.
-
-A shared **RIN** can support a strong regulatory lifecycle link. A shared **NAICS code** only means two records occupy the same classification; it does not prove they describe the same action.
+A shared RIN can support a strong lifecycle link. A shared NAICS code cannot.
 
 ### Edges
+Relationships are created only when the evidence is strong enough.
 
-FedPulse creates relationships only when the evidence supports them.
-
-That enables timelines such as:
+That supports timelines such as:
 
 ```text
 Congress
-   ↓
+  ↓
 Unified Agenda
-   ↓
-OIRA review
-   ↓
-OIRA stakeholder meetings
-   ↓
+  ↓
+OIRA
+  ↓
 Federal Register
-   ↓
+  ↓
 Grants / procurement
-   ↓
+  ↓
 Awards / spending
 ```
 
-Not every action will contain every stage. FedPulse shows observed evidence; it does not invent missing steps to make a prettier story.
+Missing stages are not invented.
 
----
+## Ranking
 
-## Ranking without a mystery score
-
-Federal data has a volume problem. A useful system has to rank aggressively without becoming opaque.
-
-FedPulse therefore decomposes opportunity ranking into auditable components rather than producing one unexplained relevance number.
+FedPulse does not rank by keyword match or dollar size alone.
 
 Signals can include:
 
-- **freshness** — how recent is the official action?
-- **novelty** — how recently did FedPulse first observe it?
-- **topic relevance** — does the work match the watch profile?
-- **geographic relevance** — is the authoritative place of performance relevant?
-- **NAICS relevance** — does the procurement classification fit?
-- **agency relevance** — is the buying/funding agency important to the profile?
-- **specificity** — do several independent dimensions agree?
-- **magnitude** — is the opportunity economically meaningful?
-- **urgency** — is the response window closing?
-- **response runway** — is there still useful time to investigate?
-- **early-stage advantage** — forecast, Sources Sought, presolicitation, special notice, stakeholder meeting, etc.
-- **competitive shape** — small-business, HUBZone, 8(a), SDVOSB, WOSB, sole-source, or other competition signals
-- **actionability** — can someone do something with this information now?
+- freshness
+- first-seen novelty
+- topic fit
+- geography
+- NAICS
+- agency
+- specificity
+- value
+- deadline urgency
+- response runway
+- early-stage advantage
+- competition / set-aside signals
+- actionability
 
-A high-dollar opportunity does not automatically win. An upstream notice does not automatically win. A keyword hit does not automatically win.
+The strongest results usually have several independent facts pointing in the same direction.
 
-The strongest items are usually the ones where **multiple independent facts agree**.
+## Semantic retrieval and AI
 
----
+Rules are good at facts. They are weaker at language.
 
-## Semantic retrieval and AI: useful, constrained, optional
-
-Rules are excellent at facts. They are weaker at language.
-
-“Roof replacement,” “building envelope remediation,” and “facilities sustainment” can describe overlapping commercial work without sharing obvious keywords. FedPulse therefore supports a semantic retrieval layer using canonical, source-aware text representations.
-
-In the Cloudflare deployment:
+FedPulse can use semantic retrieval to find related opportunities even when wording differs:
 
 ```text
 canonical event text
       ↓
 Workers AI embeddings
       ↓
-Vectorize semantic retrieval
+Vectorize
       ↓
-deterministic evidence filters + scoring
+deterministic evidence filters
 ```
 
-Embeddings help **find** candidates. They do not establish facts.
+Embeddings help find candidates. They do not establish facts.
 
-Structured evidence still decides things such as:
+Structured source data still decides things like:
 
 - place of performance
 - agency
@@ -248,188 +167,97 @@ Structured evidence still decides things such as:
 - solicitation number
 - lifecycle state
 
-FedPulse also supports an optional generative analyst/reranker behind a feature flag. When enabled, the model receives a sealed evidence packet and can help judge semantic fit, commercial relevance, actionability, and Hidden Gem potential. A separate skeptic pass can challenge those judgments.
+An optional LLM analyst can help judge relevance, commercial fit, actionability, and Hidden Gem potential. A second skeptic pass can challenge those judgments.
 
-The important boundary is absolute:
+> **AI may interpret evidence. It may not invent government facts.**
 
-> **AI may interpret evidence. It may not manufacture government facts.**
-
-Unsupported evidence references are rejected, model influence is bounded, and deterministic rankings remain the fallback.
-
----
+Unsupported claims are rejected, model influence is bounded, and deterministic ranking remains the fallback.
 
 ## Watch profiles
 
-A watch profile describes what “relevant” means for a particular user or market.
+Watch profiles define what matters for a market or user.
 
 Current profiles include:
 
-- **Construction / AEC / Washington**
-- **AI / Technology**
-- **Business Opportunities**
-- **Seattle / Pacific Northwest Intelligence**
+- Construction / AEC / Washington
+- AI / Technology
+- Business Opportunities
+- Seattle / Pacific Northwest Intelligence
 
-Profiles can express:
+Profiles can include topics, geographies, agencies, NAICS families, value thresholds, freshness windows, and deadline windows.
 
-```text
-topics / capabilities
-geographies
-agencies
-NAICS families
-minimum useful value
-high-value thresholds
-freshness windows
-deadline windows
-```
+They are meant to describe useful government activity, not just saved keywords.
 
-The result is intentionally different from a saved keyword search. A profile is a compact statement of **what kind of government action would actually matter**.
+## Trust model
 
----
-
-## Evidence first
-
-FedPulse is opinionated about trust.
-
-### Facts and analysis are different things
-
-A source field such as:
+FedPulse separates fact from analysis.
 
 ```text
-Place of performance: Tacoma, WA
+Fact: Place of performance: Tacoma, WA
+Analysis: Strong fit for a regional roofing contractor
 ```
 
-is evidence.
+It also separates identity from similarity. Similar records are not automatically treated as the same action.
 
-A conclusion such as:
+Source semantics are preserved. A Washington contracting-office address is not the same as work being performed in Washington.
 
-```text
-Strong fit for a regional roofing contractor
-```
-
-is analysis.
-
-FedPulse keeps that distinction visible.
-
-### Identity and similarity are different things
-
-Two records that look similar are not automatically the same government action.
-
-Exact identifiers can create strong links. Shared classifications, text similarity, embeddings, or model judgments can suggest related context, but they do not silently create identity.
-
-### Source semantics are preserved
-
-“Washington” in a contracting-office address is not the same as a Washington place of performance. An award date is not a solicitation deadline. A recipient location is not necessarily a work location.
-
-The system is designed around those distinctions because small semantic errors become large ranking errors at federal-data scale.
-
-### Quiet is allowed
-
-FedPulse does not need to invent an alert every day.
-
-If the evidence is weak or nothing changed materially, a quiet result is valid output.
-
----
+Quiet output is valid. FedPulse does not invent alerts when the evidence is weak.
 
 ## Architecture
 
-The core system is intentionally small and inspectable.
-
 ```text
 Official federal sources
-        │
-        ▼
+        ↓
 Source-specific ingestion
-        │
-        ▼
+        ↓
 Normalization + provenance
-        │
-        ▼
+        ↓
 SQLite government-event graph
-        │
-        ├── exact identifier linking
-        ├── lifecycle state
-        ├── historical context
-        └── embedding fingerprints
-        │
-        ▼
+        ↓
 Eligibility + deterministic ranking
-        │
-        ├── semantic retrieval (optional enhancement)
-        ├── LLM analyst / skeptic (optional enhancement)
-        └── evidence validation
-        │
-        ▼
-Generation-scoped JSON snapshot
-        │
-        ▼
+        ↓
+Semantic retrieval / optional AI
+        ↓
+Evidence validation
+        ↓
+Generation-scoped JSON
+        ↓
 Cloudflare KV + Worker dashboard
 ```
 
-### Core runtime
+Core stack:
 
 - Python 3.11+
-- Python standard library only for the core runtime
+- standard-library Python runtime
 - SQLite
-- dependency-free HTML/CSS/JavaScript dashboard
+- vanilla HTML/CSS/JavaScript
+- Cloudflare Workers, KV, R2, Workers AI, Vectorize
+- GitHub Actions for production automation
 
-### Cloudflare deployment
+Published output is generation-scoped and switched atomically so the dashboard never mixes files from different runs.
 
-- Workers Static Assets for the dashboard
-- KV for published generations
-- R2 for durable SQLite pipeline state
-- Workers AI for semantic embeddings
-- Vectorize for semantic retrieval
+## Incremental embeddings
 
-### Automation
+FedPulse does not re-embed the same corpus every night.
 
-GitHub Actions runs the production pipeline, restores state from R2, ingests current sources, validates the resulting database, incrementally maintains embeddings, persists validated state, and atomically publishes the dashboard snapshot.
-
----
-
-## Atomic publishing
-
-A monitoring system should never show half of one run mixed with half of another.
-
-FedPulse publishes immutable generation-scoped output and swaps a single current-generation pointer only after a complete snapshot exists.
-
-That means readers see one coherent view of the system rather than a collection of JSON files updated at different moments.
-
----
-
-## Incremental semantic maintenance
-
-The semantic index is maintained by content, not by blindly re-embedding the same corpus every night.
-
-For every eligible opportunity, FedPulse computes a SHA-256 fingerprint of:
+Each eligible opportunity gets a SHA-256 fingerprint of:
 
 ```text
-embedding model identity + canonical source-aware text
+embedding model + canonical event text
 ```
 
-If the fingerprint has not changed, the record is skipped.
+Unchanged records are skipped. New or changed records are embedded and upserted into Vectorize.
 
-If the record is new or materially changed, it is embedded and upserted into Vectorize. The new fingerprint is committed to SQLite **only after the Vectorize write succeeds**, so failed uploads remain eligible for retry.
+The fingerprint is committed only after the Vectorize write succeeds, so failed updates retry automatically.
 
-The nightly job scans the full eligible opportunity corpus while using a configurable update budget to control throughput during large backfills.
-
-Coverage and throughput are therefore separate concepts:
-
-```text
-full corpus coverage
-      ≠
-embed everything on every run
-```
-
----
+Nightly maintenance scans the full eligible corpus while limiting how many changed vectors are processed in one run.
 
 ## Quick start
 
-### Requirements
+Requirements:
 
 - Python 3.11+
-- [`uv`](https://docs.astral.sh/uv/) recommended
-
-Clone the repository and run the test suite:
+- `uv` recommended
 
 ```bash
 git clone https://github.com/michaelcolenso/fedpulse.git
@@ -446,7 +274,7 @@ PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 \
   --out data/outputs
 ```
 
-For an offline/local output pass against an existing database:
+Run against an existing database without ingesting new source data:
 
 ```bash
 PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 \
@@ -456,86 +284,50 @@ PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 \
   --skip-marc
 ```
 
-Compile-check the Python source:
-
-```bash
-uv run python -m compileall -q src tests scripts
-```
-
-The production Cloudflare/GitHub Actions path requires the relevant R2, KV, Workers AI, Vectorize, and Cloudflare credentials. Those services are deployment infrastructure; they are not required to understand or test the core evidence/ranking logic locally.
-
----
-
 ## Repository map
 
 ```text
-src/fedpulse/            core ingestion, graph, ranking, evidence, semantic logic
-dashboard/               dependency-free product UI
-worker/                  Cloudflare Worker entrypoint
-scripts/                 validation, publishing, semantic maintenance utilities
-tests/                   offline deterministic test suite
-docs/                    deeper technical/product documentation
-.github/workflows/       CI, nightly production pipeline, Cloudflare automation
-wrangler.jsonc           Cloudflare Worker/KV/AI/Vectorize bindings
+src/fedpulse/       ingestion, graph, ranking, semantic logic
+dashboard/          product UI
+worker/             Cloudflare Worker
+scripts/            validation and publishing utilities
+tests/              offline test suite
+docs/               deeper technical documentation
+.github/workflows/  CI and production automation
 ```
 
-Useful deeper reads:
+Useful docs:
 
-- [`docs/government-action-graph.md`](docs/government-action-graph.md) — event, identifier, edge, and lifecycle semantics
-- [`docs/commercial-product-strategy.md`](docs/commercial-product-strategy.md) — product use cases and market framing
-- [`docs/semantic-maintenance.md`](docs/semantic-maintenance.md) — full-corpus incremental embedding behavior
+- `docs/government-action-graph.md`
+- `docs/semantic-maintenance.md`
 
----
+## Who it is for
 
-## What FedPulse is for
+FedPulse is useful to people whose decisions depend on federal action:
 
-FedPulse is most useful to people whose decisions are affected by federal action but who do not want to spend their day operating federal search portals.
-
-That includes:
-
-- federal contractors and subcontractors
-- AEC and construction firms
+- contractors and subcontractors
+- AEC firms
 - manufacturers and suppliers
 - grant-seeking organizations
 - business-development teams
 - consultants
 - government-affairs and compliance teams
-- market researchers
-- journalists and public-data researchers
-- investors and strategists studying government-driven demand
+- researchers, journalists, and strategists
 
-Different users care about different signals. The underlying principle remains the same:
+The core promise is simple:
 
-> **Find the consequential government action early, show exactly why it matters, and make the evidence easy to inspect.**
+> **Find consequential federal activity early, explain why it matters, and show the evidence.**
 
----
+## What it is not
 
-## What FedPulse is not
+FedPulse is not:
 
-FedPulse is deliberately **not**:
-
-- a replacement for the official record
-- a legal or compliance opinion
-- a generic full-text government search engine
+- the official record
+- legal or compliance advice
 - a feed of every federal document
-- an “AI summary” wrapper around public data
+- an AI wrapper around government data
 - a system that assumes similarity means identity
 - a black-box prediction engine
 - a guarantee that an opportunity is commercially suitable
 
-The official source remains authoritative. FedPulse exists to help you find the right official source faster and understand its context.
-
----
-
-## The standard
-
-A FedPulse recommendation should be able to answer four questions:
-
-1. **What happened?**
-2. **Why is it relevant?**
-3. **Why is it showing up now?**
-4. **Which official evidence proves it?**
-
-If the system cannot answer those questions, the item should not be presented with confidence.
-
-That is the product.
+Official sources remain authoritative. FedPulse helps you find the right ones faster and understand their context.
