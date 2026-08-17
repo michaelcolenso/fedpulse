@@ -1,0 +1,23 @@
+name: FedPulse semantic query
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/semantic-query.yml"
+
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CLOUDFLARE_ACCOUNT_ID: 4e921a01da1f55b0ddb32bb38a5524ce
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Query construction/AEC profile
+        run: PYTHONPATH=src uv run python scripts/query_vectorize.py --profile default --top-k 20
