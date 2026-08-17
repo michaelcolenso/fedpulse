@@ -102,6 +102,17 @@ jobs:
             --db data/fedpulse.db \
             --commit-manifest /tmp/fedpulse-embedding-manifest.ndjson
 
+      - name: Discover semantic candidates and write precision audit
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          PYTHONPATH=src uv run python scripts/vectorize_discovery.py \
+            --db data/fedpulse.db \
+            --feed data/outputs/current/opportunities_today.json \
+            --audit data/outputs/vectorize_precision_audit.json \
+            --top-k 200 \
+            --min-similarity 0.50
+
       - name: Validate generated state before persistence
         run: |
           if [ -f /tmp/fedpulse-baseline.json ]; then
