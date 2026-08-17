@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable
 from zoneinfo import ZoneInfo
 
-from . import db, fr_client, hidden_gems, keyless_sources, marc_sync, opportunities
+from . import db, fr_client, hidden_gems, keyless_sources, marc_sync, opportunities, product_feed
 from .health import record_attempt, record_failure, record_success
 from .outputs_v2 import build_v2_outputs, publish_failure_outputs
 
@@ -69,7 +69,8 @@ def run_pipeline(db_path: Path,out_dir: Path,as_of: str|None=None,*,ingest_fr: b
         record_success(conn,"pipeline",stamp,"sources complete; publishing v2 outputs")
         try:
             payloads=build_v2_outputs(conn,as_of,out_dir,now); freshness=payloads["health"].get("source_freshness",{})
-            opportunities.publish_opportunities(conn,as_of,out_dir,now,freshness=freshness)
+            opportunity_payload=opportunities.publish_opportunities(conn,as_of,out_dir,now,freshness=freshness)
+            product_feed.publish_enriched_opportunities(conn,opportunity_payload,out_dir)
             hidden_gems.publish_hidden_gems(conn,as_of,out_dir,now,freshness=freshness)
             conn.close(); return 0
         except Exception as exc:
