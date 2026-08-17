@@ -29,8 +29,12 @@ function jsonResponse(body, status = 200, extraHeaders = {}) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    // Semantic mutation/query HTTP is intentionally dark by default. Production
+    // indexing uses authenticated Cloudflare API/Actions paths; an HTTP surface
+    // may be enabled later only behind explicit service authentication.
     if (url.pathname.startsWith(SEMANTIC_PREFIX)) {
-      return handleSemantic(request, env, url.pathname);
+      if (env.SEMANTIC_HTTP_ENABLED === "1") return handleSemantic(request, env, url.pathname);
+      return jsonResponse(JSON.stringify({ error: "not_found" }), 404);
     }
     if (!url.pathname.startsWith(DATA_PREFIX)) {
       return env.ASSETS.fetch(request);
