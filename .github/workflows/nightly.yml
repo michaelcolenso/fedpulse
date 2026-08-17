@@ -1,4 +1,5 @@
 name: FedPulse nightly pipeline
+# Manual baseline trigger after incremental embedding rollout.
 
 on:
   push:
