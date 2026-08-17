@@ -2,7 +2,20 @@ import re
 import unittest
 from pathlib import Path
 
-ROOT=Path(__file__).parents[1]/"dashboard"
+REPO=Path(__file__).parents[1]
+ROOT=REPO/"dashboard"
+REQUIRED_FEEDS=(
+    "daily_activity.json",
+    "packages.json",
+    "standalone.json",
+    "fr_metrics.json",
+    "marc_horizon.json",
+    "health.json",
+    "brief.json",
+    "opportunities_today.json",
+    "hidden_gems.json",
+)
+
 class TestDashboard(unittest.TestCase):
     def test_v2_fetches_and_evidence_first_contract(self):
         html=(ROOT/"index.html").read_text(); js=(ROOT/"app.js").read_text(); opportunities=(ROOT/"opportunities.js").read_text()
@@ -33,5 +46,25 @@ class TestDashboard(unittest.TestCase):
         self.assertIn("x-fedpulse-generation", js)
         self.assertIn("mixed dashboard generations", js)
         self.assertNotIn("innerHTML = value", js)
+
+    def test_every_reader_feed_is_published_served_and_verified(self):
+        publisher=(REPO/"scripts/publish_dashboard.py").read_text()
+        worker=(REPO/"worker/src/index.js").read_text()
+        verifier=(REPO/"scripts/verify_live_dashboard.py").read_text()
+        nightly=(REPO/".github/workflows/nightly.yml").read_text()
+        for name in REQUIRED_FEEDS:
+            stem=name.removesuffix(".json")
+            self.assertIn(f'"{stem}"', publisher, f"publisher omits {name}")
+            self.assertIn(f'"{name}"', worker, f"worker omits {name}")
+            self.assertIn(f'"{name}"', verifier, f"live verifier omits {name}")
+        self.assertIn("Verify every live dashboard feed", nightly)
+        self.assertIn("verify_live_dashboard.py", nightly)
+
+    def test_generation_fallback_never_masks_declared_missing_objects(self):
+        worker=(REPO/"worker/src/index.js").read_text()
+        self.assertIn("const declared", worker)
+        self.assertIn("if (!declared)", worker)
+        self.assertIn("incomplete_generation", worker)
+        self.assertIn("legacy-fallback", worker)
 
 if __name__ == "__main__": unittest.main()
