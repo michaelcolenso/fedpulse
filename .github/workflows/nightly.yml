@@ -159,3 +159,9 @@ jobs:
         run: |
           PYTHONPATH=src uv run python scripts/publish_dashboard.py \
             data/outputs-flat/current --legacy-flat
+
+      - name: Verify every live dashboard feed
+        if: success()
+        run: |
+          PYTHONPATH=src uv run python scripts/verify_live_dashboard.py \
+            https://fedpulse-dashboard.aged-morning-c8e4.workers.dev
