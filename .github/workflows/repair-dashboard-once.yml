@@ -1,0 +1,46 @@
+name: FedPulse dashboard repair (one-off)
+
+on:
+  push:
+    paths:
+      - .github/workflows/repair-dashboard-once.yml
+
+permissions:
+  contents: read
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.FEDPULSE_R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.FEDPULSE_R2_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: auto
+  R2_ENDPOINT: https://4e921a01da1f55b0ddb32bb38a5524ce.r2.cloudflarestorage.com
+  R2_BUCKET: fedpulse-state
+  R2_DB_KEY: fedpulse.db
+  CLOUDFLARE_ACCOUNT_ID: 4e921a01da1f55b0ddb32bb38a5524ce
+  CLOUDFLARE_KV_NAMESPACE_ID: 4df2d8d44f8d495e810fc3b888a4885b
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Restore production state
+        run: |
+          mkdir -p data
+          aws s3 cp "s3://${R2_BUCKET}/${R2_DB_KEY}" data/fedpulse.db --endpoint-url "$R2_ENDPOINT"
+      - name: Regenerate dashboard feeds from persisted state
+        run: |
+          PYTHONPATH=src uv run python -m fedpulse.pipeline_v2 \
+            --db data/fedpulse.db --out data/outputs \
+            --skip-ingest --skip-marc --skip-keyless-sources
+          cp -rL data/outputs data/outputs-flat
+      - name: Publish complete atomic generation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          PYTHONPATH=src uv run python scripts/publish_dashboard.py data/outputs-flat/current --legacy-flat
+      - name: Verify all live feeds
+        run: |
+          PYTHONPATH=src uv run python scripts/verify_live_dashboard.py \
+            https://fedpulse-dashboard.aged-morning-c8e4.workers.dev
