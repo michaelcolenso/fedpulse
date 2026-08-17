@@ -9,14 +9,14 @@ from fedpulse.opportunities import rank_opportunities
 
 
 class SamGeographyTests(unittest.TestCase):
-    def _rank(self, csv_text: str):
+    def _rank(self, csv_text: str, profile: str = "pnw_intelligence"):
         events = sam_opportunities_client.parse_csv(csv_text.encode("utf-8"))
         root = Path(tempfile.mkdtemp())
         conn = db.connect(root / "test.db")
         db.init_db(conn)
         upsert_events(conn, events)
         conn.commit()
-        return events, rank_opportunities(conn, "2026-08-16", "pnw_intelligence", 20)
+        return events, rank_opportunities(conn, "2026-08-16", profile, 20)
 
     def test_contracting_office_city_is_not_project_geography(self):
         body = "\n".join([
@@ -41,6 +41,22 @@ class SamGeographyTests(unittest.TestCase):
         self.assertEqual(stored_row["PopState"], "Washington")
         match = next(item for item in ranked if item["event_id"] == "sam_opportunity:wa-1")
         self.assertTrue(any(reason.startswith("geography:") for reason in match["reasons"]))
+
+    def test_default_washington_profile_rejects_foreign_construction(self):
+        body = "\n".join([
+            "NoticeId,Title,Department/Ind.Agency,PostedDate,Type,City,State,PopCity,PopState,NaicsCode,ResponseDeadLine,Link",
+            "foreign-2,Embassy concrete and structural repairs,STATE DEPARTMENT,2026-08-14,Sources Sought,Washington,DC,Kigali,,236220,2026-08-25,https://sam.gov/foreign-2",
+        ])
+        _events, ranked = self._rank(body, "default")
+        self.assertFalse(any(item["event_id"] == "sam_opportunity:foreign-2" for item in ranked))
+
+    def test_default_washington_profile_accepts_tacoma_construction(self):
+        body = "\n".join([
+            "NoticeId,Title,Department/Ind.Agency,PostedDate,Type,City,State,PopCity,PopState,NaicsCode,ResponseDeadLine,Link",
+            "wa-2,Concrete and structural repairs,GENERAL SERVICES ADMINISTRATION,2026-08-14,Sources Sought,Washington,DC,Tacoma,Washington,236220,2026-08-25,https://sam.gov/wa-2",
+        ])
+        _events, ranked = self._rank(body, "default")
+        self.assertTrue(any(item["event_id"] == "sam_opportunity:wa-2" for item in ranked))
 
 
 if __name__ == "__main__":

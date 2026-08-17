@@ -94,6 +94,7 @@ def score_event(row,identifiers,profile,as_of):
     keyword_hits=[x for x in profile.get("keywords",[]) if _term_match(x,haystack)];weak={str(x).lower() for x in profile.get("weak_keywords",[])};strong_keyword_hits=[x for x in keyword_hits if str(x).lower() not in weak]
     if keyword_hits:components["relevance"]+=min(26,8+len(set(keyword_hits))*3);reasons.append("topic: "+", ".join(sorted(set(keyword_hits))[:4]))
     geo_hits=[x for x in profile.get("geographies",[]) if _term_match(x,geo_haystack)]
+    if profile.get("require_geography") and not geo_hits:return None
     if geo_hits:components["relevance"]+=24;reasons.append("geography: "+", ".join(sorted(set(geo_hits))[:3]))
     naics=set(identifiers.get("naics",[]));hits=sorted(naics & set(str(x) for x in profile.get("naics",[])))
     if hits:components["relevance"]+=26;reasons.append("NAICS: "+", ".join(hits[:3]))

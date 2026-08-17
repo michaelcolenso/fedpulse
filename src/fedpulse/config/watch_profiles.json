@@ -4,6 +4,7 @@
     "keywords": ["construction", "renovation", "remodel", "repair", "roof", "roofing", "building", "facility", "housing", "residential", "multifamily", "apartment", "adu", "accessory dwelling", "carpentry", "concrete", "structural", "seismic", "energy retrofit", "weatherization", "accessibility", "aging in place", "architecture", "architectural", "engineering", "design-build", "design build", "general contractor", "site work", "trail hardening", "public works"],
     "weak_keywords": ["building", "facility", "structural", "repair"],
     "geographies": ["washington", "washington state", "seattle", "king county", "tacoma", "pierce county", "snohomish", "puget sound"],
+    "require_geography": true,
     "agencies": ["General Services Administration", "Department of Housing and Urban Development", "Department of Veterans Affairs", "Department of the Interior", "Department of Agriculture", "Department of Transportation", "Department of Energy", "Federal Emergency Management Agency", "Army Corps of Engineers"],
     "naics": ["236115", "236116", "236117", "236118", "236210", "236220", "237110", "237310", "237990", "238110", "238120", "238130", "238140", "238150", "238160", "238170", "238190", "238210", "238220", "238290", "238310", "238320", "238330", "238340", "238350", "238390", "238910", "238990", "541310", "541320", "541330", "541340", "541350", "541360", "541370"],
     "minimum_amount": 25000, "high_value_amount": 500000, "lookback_days": 7, "closing_soon_days": 10
@@ -31,6 +32,7 @@
     "keywords": ["housing", "transportation", "infrastructure", "port", "maritime", "ferry", "shipyard", "energy", "hydropower", "salmon", "environmental", "wildfire", "forest", "tribal", "technology", "aerospace", "manufacturing", "construction", "economic development"],
     "weak_keywords": ["housing", "transportation", "infrastructure", "port", "maritime", "ferry", "shipyard", "energy", "hydropower", "salmon", "environmental", "wildfire", "forest", "tribal", "technology", "aerospace", "manufacturing", "construction", "economic development"],
     "geographies": ["washington", "washington state", "seattle", "king county", "tacoma", "pierce county", "snohomish", "everett", "bellevue", "bremerton", "kitsap", "olympia", "spokane", "puget sound", "pacific northwest", "oregon", "idaho"],
+    "require_geography": true,
     "agencies": [],
     "naics": [],
     "minimum_amount": 50000, "high_value_amount": 1000000, "lookback_days": 14, "closing_soon_days": 14
