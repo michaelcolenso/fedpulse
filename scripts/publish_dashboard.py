@@ -18,6 +18,8 @@ OUTPUTS = (
     "marc_horizon",
     "health",
     "brief",
+    "opportunities_today",
+    "hidden_gems",
 )
 
 
@@ -68,7 +70,7 @@ def main() -> int:
     git_sha = os.environ.get("GITHUB_SHA", "local")
     generation = f"{str(generated_at).replace(':', '').replace('-', '')}-{git_sha[:12]}"
     manifest = {
-        "schema_version": 3,
+        "schema_version": 4,
         "generation": generation,
         "generated_at": generated_at,
         "as_of": as_of,
