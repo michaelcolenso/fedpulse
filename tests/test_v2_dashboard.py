@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT=Path(__file__).parents[1]/"dashboard"
 class TestDashboard(unittest.TestCase):
     def test_v2_fetches_and_evidence_first_contract(self):
-        html=(ROOT/"index.html").read_text(); js=(ROOT/"app.js").read_text()
+        html=(ROOT/"index.html").read_text(); js=(ROOT/"app.js").read_text(); opportunities=(ROOT/"opportunities.js").read_text()
         for name in ("daily_activity","packages","standalone","fr_metrics","marc_horizon","health","brief"):
             self.assertIn(name,js)
         self.assertIn("${name}.json",js)
@@ -17,8 +17,13 @@ class TestDashboard(unittest.TestCase):
         for token in ("What happened","Why it matters","Why FedPulse noticed","What to do","See the evidence"):
             self.assertIn(token,js)
         self.assertIn("Nothing requires your attention today",js)
-        self.assertIn("Also watching",html)
+        self.assertIn("<h2>Watch</h2>",html)
         self.assertIn("Evidence explorer",html)
+        self.assertIn("ranking-mode",html)
+        self.assertIn("evidence_summary",opportunities)
+        self.assertIn("related_actions",opportunities)
+        self.assertIn("FedPulse analysis",opportunities)
+        self.assertIn("No generative model influenced",opportunities)
         self.assertIn("esc(",js); self.assertIn("target=\"_blank\"",js); self.assertIn("rel=\"noopener noreferrer\"",js)
         self.assertIn("low-confidence",js)
         self.assertIn("methodology", html.lower())
