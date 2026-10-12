@@ -45,7 +45,7 @@ Status labels:
 - **The 0.63 / 77.6% headline is mostly one office.** GSA office 47QSWA is 21.2% of the scored set (828 units). Those are small supply buys (PSC 5640 wallboard/insulation, 7930) coded as NAICS 23, and nearly all draw one offer. None of them would appear as SAM construction notices.
 - **On SAM-like notices the signal is real but modest.** Office history gives Spearman about 0.37. When it flags a thin field, about 42% actually are, against a 26% base rate. Most flags are wrong.
 - **Office data adds little over the baseline.** A nationwide table of how a notice is bought (procedure × set-aside × construction-vs-repair letter) does about as well, and its thin calls are more often right.
-- **Earlier comparisons across groupings were invalid.** Each grouping was scored on a different subset. On the 3,473 procurements every grouping can score, all five land at Spearman 0.59–0.67. That is in `robust.json` under `on_common_subset`.
+- **Earlier comparisons across groupings were invalid.** Each grouping was scored on a different subset. On the 3,452 procurements that all six groupings (including the baseline) can score, every one lands at Spearman 0.59–0.67: office only 0.67, office × PSC 0.65, nationwide baseline 0.62, NAICS6 nationwide 0.59. That is in `robust.json` under `on_common_subset`.
 
 **Agent-confirmed** (the review agent's scripts; not re-run by me):
 - **The difference from the baseline isn't significant.** Office-clustered bootstrap: the SAM-like office × PSC Spearman 95% CI is 0.285–0.435. The paired difference vs the baseline is +0.042 (CI −0.027 to +0.126), which includes 0.

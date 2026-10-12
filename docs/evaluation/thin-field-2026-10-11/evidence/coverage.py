@@ -46,12 +46,13 @@ for r in csv.DictReader(open(sam_path, newline="", encoding="utf-8", errors="rep
     naics, psc = (r["NaicsCode"] or "").strip(), (r["ClassificationCode"] or "").strip()[:4]
     if not (naics.startswith("23") or psc[:1] in ("Y", "Z")): continue
     h, ho = hist.get((r["AAC Code"], psc), {}), hist_office.get(r["AAC Code"], {})
+    # Forecast from office x PSC history when it has >=3 procurements, else fall back to the office's history.
+    level, src = ("office_psc", h) if len(h) >= 3 else (("office", ho) if len(ho) >= 3 else (None, {}))
     postings.append({"sol": (r["Sol#"] or r["NoticeId"]).strip().upper(), "posted": r["PostedDate"], "type": r["Type"],
                      "title": r["Title"], "office": r["Office"], "aac": r["AAC Code"], "psc": psc, "deadline": dl,
-                     "pop_state": r["PopState"], "setaside": r["SetASide"],
-                     "level": "office_psc" if len(h) >= 3 else ("office" if len(ho) >= 3 else None),
-                     "n_prior": len(h), "median": statistics.median(h.values()) if len(h) >= 3 else None,
-                     "pct_single": round(100 * sum(v == 1 for v in h.values()) / len(h)) if len(h) >= 3 else None})
+                     "pop_state": r["PopState"], "setaside": r["SetASide"], "level": level,
+                     "n_prior": len(src), "median": statistics.median(src.values()) if src else None,
+                     "pct_single": round(100 * sum(v == 1 for v in src.values()) / len(src)) if src else None})
 
 latest = {}
 for p in postings:
@@ -64,15 +65,18 @@ def levels(ps):
     return {"n": n, "office_psc": a, "office_psc_pct": round(100 * a / n, 1), "office_only": b, "any_pct": round(100 * (a + b) / n, 1)}
 
 
+def split(ps):
+    return {"le2": sum(p["median"] <= 2 for p in ps), "between": sum(2 < p["median"] < 5 for p in ps), "ge5": sum(p["median"] >= 5 for p in ps)}
+
+
 scored = [p for p in bids if p["median"] is not None]
 out = {
     "postings": levels(postings),
     "unique_solicitations": levels(uniq),
     "unique_bid_solicitations": levels(bids),
-    "bid_forecast_split": {"le2": sum(p["median"] <= 2 for p in scored), "between": sum(2 < p["median"] < 5 for p in scored),
-                           "ge5": sum(p["median"] >= 5 for p in scored)},
-    "thin_bids": sorted(({k: p[k] for k in ("sol", "title", "office", "aac", "psc", "deadline", "pop_state", "setaside", "n_prior", "median", "pct_single")}
-                         for p in scored if p["median"] <= 2), key=lambda x: (x["median"], -x["n_prior"])),
+    "bid_forecast_split_by_level": {lvl: split([p for p in scored if p["level"] == lvl]) for lvl in ("office_psc", "office")},
+    "thin_bids": sorted(({k: p[k] for k in ("sol", "title", "office", "aac", "psc", "deadline", "pop_state", "setaside", "level", "n_prior", "median", "pct_single")}
+                         for p in scored if p["median"] <= 2), key=lambda x: (x["level"] != "office_psc", x["median"], -x["n_prior"])),
 }
 print(json.dumps({k: v for k, v in out.items() if k != "thin_bids"}, indent=1))
 print(f"{len(out['thin_bids'])} thin bids; first 5:")
