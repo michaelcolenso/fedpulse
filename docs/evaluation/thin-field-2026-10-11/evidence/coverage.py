@@ -2,7 +2,8 @@
 
 History = robust.py's unit: competed standalone procurements (no IDV orders, no IDV base awards,
 no non-competed / NOT AVAILABLE), base date FY2023-2025, offers 1..998, one per office+solicitation
-(earliest award). Open notices are restricted to PSC Y/Z, matching the SAM-like backtest population.
+(earliest award). Open notices are restricted to PSC Y/Z and exclude sole-source set-asides, matching
+the competed SAM-like backtest population.
 Keyed by SAM 'AAC Code' == FPDS awarding_office_code and SAM ClassificationCode == FPDS PSC.
 
 Reports both notice postings (amendments/reposts count separately) and unique solicitations
@@ -52,6 +53,7 @@ for r in csv.DictReader(open(sam_path, newline="", encoding="utf-8", errors="rep
     if not dl or dl < today: continue
     psc = (r["ClassificationCode"] or "").strip()[:4]
     if psc[:1] not in ("Y", "Z"): continue  # construction (Y) / repair (Z) PSC, the population the backtest evaluated
+    if "SOLE SOURCE" in (r["SetASide"] or "").upper(): continue  # no competitive field; the backtest excludes non-competed awards
     h, ho = hist.get((r["AAC Code"], psc), {}), hist_office.get(r["AAC Code"], {})
     # Forecast from office x PSC history when it has >=3 procurements, else fall back to the office's history.
     level, src = ("office_psc", h) if len(h) >= 3 else (("office", ho) if len(ho) >= 3 else (None, {}))
