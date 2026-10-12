@@ -2,7 +2,7 @@
 distributions, residential-repair and WA breakdowns, and how much money flows through IDV orders.
 Its 'predictive' block is a superseded first pass; robust.py is the authoritative backtest.
 
-Usage: python3 -I analyze.py <contracts_prime_award_summaries.csv> <out.json>
+Usage: uv run python -I analyze.py <contracts_prime_award_summaries.csv> <out.json>
 """
 import csv, json, statistics, sys
 from collections import defaultdict

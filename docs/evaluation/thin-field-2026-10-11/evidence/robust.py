@@ -12,7 +12,7 @@ score (groupings scored on different subsets are not comparable), (c) the SAM-li
 (solicitation ID, PSC Y/Z, value >= $25k) against a nationwide composition baseline that uses no
 office data, and (d) how concentrated the scored set is in a few offices.
 
-Usage: python3 -I robust.py <Contracts_PrimeAwardSummaries.csv> [out.json]
+Usage: uv run python -I robust.py <Contracts_PrimeAwardSummaries.csv> [out.json]
 """
 import csv, json, statistics, sys
 from collections import defaultdict

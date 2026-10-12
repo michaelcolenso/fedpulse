@@ -102,7 +102,7 @@ Status labels:
 
 ## Reproduce
 
-All scripts are stdlib-only; run each with `python3 -I`. Each takes an optional output path.
+All scripts are stdlib-only; run each with `uv run python -I <script> ...` from anywhere inside the repo (the repo uses uv for all Python). Each takes an optional output path.
 
 | Script | What it does | Output |
 |---|---|---|

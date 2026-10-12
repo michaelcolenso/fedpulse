@@ -7,7 +7,7 @@ Keyed by SAM 'AAC Code' == FPDS awarding_office_code and SAM ClassificationCode 
 Reports both notice postings (amendments/reposts count separately) and unique solicitations
 (Sol# upper-cased; the latest posting wins).
 
-Usage: python3 -I coverage.py <fpds_contracts.csv> <sam_ContractOpportunitiesFullCSV.csv> <YYYY-MM-DD> [out.json]
+Usage: uv run python -I coverage.py <fpds_contracts.csv> <sam_ContractOpportunitiesFullCSV.csv> <YYYY-MM-DD> [out.json]
 """
 import csv, json, statistics, sys
 from collections import defaultdict
