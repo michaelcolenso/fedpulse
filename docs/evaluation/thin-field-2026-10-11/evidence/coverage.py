@@ -1,7 +1,8 @@
 """Coverage: how many currently open SAM construction notices can get a forecast from FPDS history?
 
 History = robust.py's unit: competed standalone procurements (no IDV orders, no IDV base awards,
-no non-competed / NOT AVAILABLE), base date FY2023-2025, offers 1..998, one per office+solicitation.
+no non-competed / NOT AVAILABLE), base date FY2023-2025, offers 1..998, one per office+solicitation
+(earliest award). Open notices are restricted to PSC Y/Z, matching the SAM-like backtest population.
 Keyed by SAM 'AAC Code' == FPDS awarding_office_code and SAM ClassificationCode == FPDS PSC.
 
 Reports both notice postings (amendments/reposts count separately) and unique solicitations
@@ -22,7 +23,7 @@ def fy(d):
     return y + 1 if m >= 10 else y
 
 
-hist = defaultdict(dict); hist_office = defaultdict(dict)
+units = {}  # same unit as robust.py: earliest award per office + solicitation (or per award when no solicitation ID)
 for r in csv.DictReader(open(fpds_path, newline="", encoding="utf-8")):
     d = r["award_base_action_date"][:10]
     if len(d) < 10 or not (2023 <= fy(d) <= 2025): continue
@@ -32,9 +33,15 @@ for r in csv.DictReader(open(fpds_path, newline="", encoding="utf-8")):
     try: o = float(r["number_of_offers_received"])
     except ValueError: continue
     if o <= 0 or o >= 999: continue
-    k = r["solicitation_identifier"].strip().upper() or r["contract_award_unique_key"]
-    hist[(r["awarding_office_code"], r["product_or_service_code"][:4])][k] = o
-    hist_office[r["awarding_office_code"]][k] = o
+    sol = r["solicitation_identifier"].strip().upper()
+    k = ("S", r["awarding_office_code"], sol) if sol else ("A", r["contract_award_unique_key"])
+    if k not in units or d < units[k]["date"]:
+        units[k] = {"date": d, "office": r["awarding_office_code"], "psc": r["product_or_service_code"][:4], "offers": o}
+
+hist = defaultdict(dict); hist_office = defaultdict(dict)
+for k, u in units.items():
+    hist[(u["office"], u["psc"])][k] = u["offers"]
+    hist_office[u["office"]][k] = u["offers"]
 
 OPEN_TYPES = {"Solicitation", "Combined Synopsis/Solicitation", "Presolicitation", "Sources Sought"}
 BID_TYPES = {"Solicitation", "Combined Synopsis/Solicitation"}
@@ -43,8 +50,8 @@ for r in csv.DictReader(open(sam_path, newline="", encoding="utf-8", errors="rep
     if r["Active"] != "Yes" or r["Type"] not in OPEN_TYPES: continue
     dl = (r["ResponseDeadLine"] or "")[:10]
     if not dl or dl < today: continue
-    naics, psc = (r["NaicsCode"] or "").strip(), (r["ClassificationCode"] or "").strip()[:4]
-    if not (naics.startswith("23") or psc[:1] in ("Y", "Z")): continue
+    psc = (r["ClassificationCode"] or "").strip()[:4]
+    if psc[:1] not in ("Y", "Z"): continue  # construction (Y) / repair (Z) PSC, the population the backtest evaluated
     h, ho = hist.get((r["AAC Code"], psc), {}), hist_office.get(r["AAC Code"], {})
     # Forecast from office x PSC history when it has >=3 procurements, else fall back to the office's history.
     level, src = ("office_psc", h) if len(h) >= 3 else (("office", ho) if len(ho) >= 3 else (None, {}))

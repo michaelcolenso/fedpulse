@@ -25,6 +25,7 @@ Status labels:
 
 **Test:** walk forward through time.
 - Each FY2024–25 procurement is forecast from the median offers of ≥3 same-group procurements that are at least 30 days older.
+- **Limitation: the history cutoff is anchored to the award date, not the notice's posting date.** A live forecast would only see history up to posting. This data can't reconstruct posting dates: the SAM extract mostly holds 2026 notices, and only 14 of 7,342 FY2024–25 solicitation IDs appear in it (agent-confirmed). Longer gaps approximate an earlier cutoff: on SAM-like units, office × PSC scores 0.369 at 30 days, 0.344 at 90 and 0.337 at 180 (agent-confirmed). The signal gets slightly weaker, so the verdict doesn't depend on this.
 - Two populations are scored:
   - **All units:** everything the method can score.
   - **SAM-like units:** has a solicitation ID, PSC Y or Z, and potential value ≥ $25k. These look like the open notices the product would score. Value is a post-award field, used here only to define the population.

@@ -1,35 +1,35 @@
 {
  "postings": {
-  "n": 1026,
-  "office_psc": 358,
-  "office_psc_pct": 34.9,
-  "office_only": 539,
-  "any_pct": 87.4
+  "n": 887,
+  "office_psc": 354,
+  "office_psc_pct": 39.9,
+  "office_only": 430,
+  "any_pct": 88.4
  },
  "unique_solicitations": {
-  "n": 556,
-  "office_psc": 210,
-  "office_psc_pct": 37.8,
-  "office_only": 274,
-  "any_pct": 87.1
+  "n": 474,
+  "office_psc": 206,
+  "office_psc_pct": 43.5,
+  "office_only": 210,
+  "any_pct": 87.8
  },
  "unique_bid_solicitations": {
-  "n": 378,
-  "office_psc": 141,
-  "office_psc_pct": 37.3,
-  "office_only": 184,
-  "any_pct": 86.0
+  "n": 321,
+  "office_psc": 137,
+  "office_psc_pct": 42.7,
+  "office_only": 141,
+  "any_pct": 86.6
  },
  "bid_forecast_split_by_level": {
   "office_psc": {
-   "le2": 22,
+   "le2": 19,
    "between": 107,
-   "ge5": 12
+   "ge5": 11
   },
   "office": {
-   "le2": 45,
-   "between": 108,
-   "ge5": 31
+   "le2": 33,
+   "between": 83,
+   "ge5": 25
   }
  },
  "thin_bids": [
@@ -99,7 +99,7 @@
    "pop_state": "OK",
    "setaside": "Service-Disabled Veteran-Owned Small Business (SDVOSB) Set-Aside (FAR 19.14)",
    "level": "office_psc",
-   "n_prior": 120,
+   "n_prior": 119,
    "median": 2.0,
    "pct_single": 22
   },
@@ -174,20 +174,6 @@
    "pct_single": 15
   },
   {
-   "sol": "36C25727Q0022",
-   "title": "Z1DA--NEW: Comprehensive Roof Maintenance and Repair | 549",
-   "office": "257-NETWORK CONTRACT OFFICE 17 (36C257)",
-   "aac": "36C257",
-   "psc": "Z1DA",
-   "deadline": "2026-10-28",
-   "pop_state": "TX",
-   "setaside": "Service-Disabled Veteran-Owned Small Business (SDVOSB) Set-Aside (FAR 19.14)",
-   "level": "office_psc",
-   "n_prior": 7,
-   "median": 2.0,
-   "pct_single": 43
-  },
-  {
    "sol": "36C77626B0011_1",
    "title": "Y1DZ--519-371 Construct New CLC Phase III Minor Construction - Big Spring, TX VAMC",
    "office": "PCAC (36C776)",
@@ -228,34 +214,6 @@
    "n_prior": 7,
    "median": 2.0,
    "pct_single": 43
-  },
-  {
-   "sol": "36C25726Q0431",
-   "title": "36C25726Q0431 504-26-006 RE FINISH B4 N AND F ADM",
-   "office": "257-NETWORK CONTRACT OFFICE 17 (36C257)",
-   "aac": "36C257",
-   "psc": "Z1DA",
-   "deadline": "2026-10-13",
-   "pop_state": "TX",
-   "setaside": "Service-Disabled Veteran-Owned Small Business (SDVOSB) Set-Aside (FAR 19.14)",
-   "level": "office_psc",
-   "n_prior": 7,
-   "median": 2.0,
-   "pct_single": 43
-  },
-  {
-   "sol": "36C24727Q0036_0001",
-   "title": "J065--RFQ - INSTALL LEAD BASED LINERS - 544 Columbia SC, 29209",
-   "office": "247-NETWORK CONTRACT OFFICE 7 (36C247)",
-   "aac": "36C247",
-   "psc": "J065",
-   "deadline": "2026-10-23",
-   "pop_state": "SC",
-   "setaside": "Service-Disabled Veteran-Owned Small Business (SDVOSB) Set-Aside (FAR 19.14)",
-   "level": "office_psc",
-   "n_prior": 5,
-   "median": 2.0,
-   "pct_single": 0
   },
   {
    "sol": "140P2026R0109",
@@ -440,62 +398,6 @@
    "pct_single": 67
   },
   {
-   "sol": "36C25027Q0014",
-   "title": "J061--541 Electrical Power Distribution Equipment Testing, Inspection, and Maintenance - VAMC Cleveland",
-   "office": "250-NETWORK CONTRACT OFFICE 10 (36C250)",
-   "aac": "36C250",
-   "psc": "J061",
-   "deadline": "2026-10-23",
-   "pop_state": "OH",
-   "setaside": "Small Business Set Aside - Total",
-   "level": "office",
-   "n_prior": 147,
-   "median": 2.0,
-   "pct_single": 28
-  },
-  {
-   "sol": "36C24827Q0036",
-   "title": "6730--FY27 Remove/Install Two (2) Commercial-Grade Laser/LED Projectors",
-   "office": "248-NETWORK CONTRACT OFFICE 8 (36C248)",
-   "aac": "36C248",
-   "psc": "6730",
-   "deadline": "2026-10-26",
-   "pop_state": "",
-   "setaside": "",
-   "level": "office",
-   "n_prior": 132,
-   "median": 2.0,
-   "pct_single": 36
-  },
-  {
-   "sol": "36C24826R0124",
-   "title": "5680--FY27 NRM (PROJ 573-24-110) BB - Expand Cardiology Service",
-   "office": "248-NETWORK CONTRACT OFFICE 8 (36C248)",
-   "aac": "36C248",
-   "psc": "5680",
-   "deadline": "2026-10-28",
-   "pop_state": "FL",
-   "setaside": "Service-Disabled Veteran-Owned Small Business (SDVOSB) Set-Aside (FAR 19.14)",
-   "level": "office",
-   "n_prior": 132,
-   "median": 2.0,
-   "pct_single": 36
-  },
-  {
-   "sol": "36C24626Q1086",
-   "title": "5670--COMMERCIAL MODULAR PLATFORM ALUMINUM RAMP INSTALLATION",
-   "office": "246-NETWORK CONTRACTING OFFICE 6 (36C246)",
-   "aac": "36C246",
-   "psc": "5670",
-   "deadline": "2026-10-15",
-   "pop_state": "NC",
-   "setaside": "Service-Disabled Veteran-Owned Small Business (SDVOSB) Set-Aside (FAR 19.14)",
-   "level": "office",
-   "n_prior": 116,
-   "median": 2.0,
-   "pct_single": 30
-  },
-  {
    "sol": "36C24626R0085",
    "title": "Z2FZ--590-24-450 Renovate Transitional Residences",
    "office": "246-NETWORK CONTRACTING OFFICE 6 (36C246)",
@@ -538,62 +440,6 @@
    "pct_single": 32
   },
   {
-   "sol": "36C26226Q1480",
-   "title": "W085--Portable Restroom and Hand Washing Station Service",
-   "office": "262-NETWORK CONTRACT OFFICE 22 (36C262)",
-   "aac": "36C262",
-   "psc": "W085",
-   "deadline": "2026-10-13",
-   "pop_state": "",
-   "setaside": "Service-Disabled Veteran-Owned Small Business (SDVOSB) Set-Aside (FAR 19.14)",
-   "level": "office",
-   "n_prior": 114,
-   "median": 2.0,
-   "pct_single": 32
-  },
-  {
-   "sol": "36C25626Q1011",
-   "title": "J061--TRIENNIAL ELECTRICAL MAINTENANCE FY26 AMENDMENT #3 Q&A RESPONSE, SCOPE UPDATE, DRAWINGS AND PANEL LISTS NEW DEADLINE: 10/27/26 POP START DATE: 12/01/2026",
-   "office": "256-NETWORK CONTRACT OFFICE 16 (36C256)",
-   "aac": "36C256",
-   "psc": "J061",
-   "deadline": "2026-10-27",
-   "pop_state": "LA",
-   "setaside": "Service-Disabled Veteran-Owned Small Business (SDVOSB) Set-Aside (FAR 19.14)",
-   "level": "office",
-   "n_prior": 110,
-   "median": 2.0,
-   "pct_single": 31
-  },
-  {
-   "sol": "36C26327Q0053",
-   "title": "Reverse Osmosis System Modifications",
-   "office": "NETWORK CONTRACT OFFICE 23 (36C263)",
-   "aac": "36C263",
-   "psc": "J046",
-   "deadline": "2026-10-23",
-   "pop_state": "MN",
-   "setaside": "",
-   "level": "office",
-   "n_prior": 50,
-   "median": 2.0,
-   "pct_single": 24
-  },
-  {
-   "sol": "36C26127Q0067",
-   "title": "J061--Triennial Circuit Breaker and Feeder Testing",
-   "office": "261-NETWORK CONTRACT OFFICE 21 (36C261)",
-   "aac": "36C261",
-   "psc": "J061",
-   "deadline": "2026-11-09",
-   "pop_state": "",
-   "setaside": "",
-   "level": "office",
-   "n_prior": 37,
-   "median": 2.0,
-   "pct_single": 22
-  },
-  {
    "sol": "36C26126R0055_2",
    "title": "Z2LZ--Design Build to Install Parking Shades and Parking Lot Reconfiguration Project 593-26-306",
    "office": "261-NETWORK CONTRACT OFFICE 21 (36C261)",
@@ -634,34 +480,6 @@
    "n_prior": 37,
    "median": 2.0,
    "pct_single": 22
-  },
-  {
-   "sol": "36C26126Q0756",
-   "title": "VA Palo Alto Boiler Plant Services",
-   "office": "261-NETWORK CONTRACT OFFICE 21 (36C261)",
-   "aac": "36C261",
-   "psc": "J044",
-   "deadline": "2026-10-12",
-   "pop_state": "CA",
-   "setaside": "",
-   "level": "office",
-   "n_prior": 37,
-   "median": 2.0,
-   "pct_single": 22
-  },
-  {
-   "sol": "SPE8E627T0083",
-   "title": "42--FACEPIECE,BREATHING EQ",
-   "office": "DLA TROOP SUPPORT",
-   "aac": "SPE8E6",
-   "psc": "42",
-   "deadline": "2026-10-13",
-   "pop_state": "",
-   "setaside": "Small Business Set Aside - Total",
-   "level": "office",
-   "n_prior": 20,
-   "median": 2.0,
-   "pct_single": 45
   },
   {
    "sol": "19BE2026Q0620",
@@ -734,20 +552,6 @@
    "pct_single": 17
   },
   {
-   "sol": "W9127826RA087",
-   "title": "Black Warrior, Tombigbee, Alabama, Coosa Rivers Project Management Office",
-   "office": "W074 ENDIST MOBILE",
-   "aac": "W91278",
-   "psc": "C1AA",
-   "deadline": "2026-11-05",
-   "pop_state": "",
-   "setaside": "",
-   "level": "office",
-   "n_prior": 12,
-   "median": 2.0,
-   "pct_single": 17
-  },
-  {
    "sol": "W9127826RA089",
    "title": "Vertical Construction MATOC",
    "office": "W074 ENDIST MOBILE",
@@ -796,20 +600,6 @@
    "aac": "W911PT",
    "psc": "Z2PZ",
    "deadline": "2026-10-23",
-   "pop_state": "",
-   "setaside": "Small Business Set Aside - Total",
-   "level": "office",
-   "n_prior": 10,
-   "median": 2.0,
-   "pct_single": 30
-  },
-  {
-   "sol": "W911PT27QA010",
-   "title": "Watervliet Arsenal (WVA) Replacement of the 300 Line Chrome Piping",
-   "office": "W6QK ACC WVA",
-   "aac": "W911PT",
-   "psc": "N047",
-   "deadline": "2026-10-26",
    "pop_state": "",
    "setaside": "Small Business Set Aside - Total",
    "level": "office",
