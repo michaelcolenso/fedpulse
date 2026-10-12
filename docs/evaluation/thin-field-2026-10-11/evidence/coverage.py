@@ -94,7 +94,7 @@ out = {
     "unique_bid_solicitations": levels(bids),
     "bid_forecast_split_by_level": {lvl: split([p for p in scored if p["level"] == lvl]) for lvl in ("office_psc", "office")},
     "thin_bids": sorted(({k: p[k] for k in ("sol", "title", "office", "aac", "psc", "deadline", "pop_state", "setaside", "level", "n_prior", "median", "pct_single")}
-                         for p in scored if p["median"] <= 2), key=lambda x: (x["level"] != "office_psc", x["median"], -x["n_prior"])),
+                         for p in scored if p["median"] <= 2), key=lambda x: (x["level"] != "office_psc", x["median"], -x["n_prior"], x["aac"], x["sol"])),
 }
 print(json.dumps({k: v for k, v in out.items() if k != "thin_bids"}, indent=1))
 print(f"{len(out['thin_bids'])} thin bids; first 5:")
