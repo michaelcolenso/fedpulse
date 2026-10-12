@@ -1,0 +1,252 @@
+{
+ "units": 18218,
+ "units_with_solicitation_id": 10841,
+ "each_on_own_subset": [
+  {
+   "label": "office x PSC",
+   "n_scored": 3906,
+   "spearman": 0.629,
+   "base_le2_pct": 45.4,
+   "pred_le2_n": 1556,
+   "pred_le2_actual_le2_pct": 77.6,
+   "pred_ge5_n": 707,
+   "pred_ge5_actual_le2_pct": 14.1
+  },
+  {
+   "label": "office x NAICS6",
+   "n_scored": 6239,
+   "spearman": 0.518,
+   "base_le2_pct": 39.9,
+   "pred_le2_n": 2219,
+   "pred_le2_actual_le2_pct": 66.8,
+   "pred_ge5_n": 1186,
+   "pred_ge5_actual_le2_pct": 16.0
+  },
+  {
+   "label": "office only",
+   "n_scored": 10152,
+   "spearman": 0.438,
+   "base_le2_pct": 37.1,
+   "pred_le2_n": 2867,
+   "pred_le2_actual_le2_pct": 63.3,
+   "pred_ge5_n": 1788,
+   "pred_ge5_actual_le2_pct": 16.8
+  },
+  {
+   "label": "PSC only (nationwide)",
+   "n_scored": 10483,
+   "spearman": 0.337,
+   "base_le2_pct": 37.4,
+   "pred_le2_n": 2123,
+   "pred_le2_actual_le2_pct": 63.6,
+   "pred_ge5_n": 674,
+   "pred_ge5_actual_le2_pct": 18.7
+  },
+  {
+   "label": "NAICS6 only (nationwide)",
+   "n_scored": 11062,
+   "spearman": 0.307,
+   "base_le2_pct": 37.6,
+   "pred_le2_n": 1260,
+   "pred_le2_actual_le2_pct": 75.6,
+   "pred_ge5_n": 332,
+   "pred_ge5_actual_le2_pct": 18.4
+  },
+  {
+   "label": "baseline: procedure x set-aside x PSC letter (nationwide)",
+   "n_scored": 10864,
+   "spearman": 0.402,
+   "base_le2_pct": 37.6,
+   "pred_le2_n": 2294,
+   "pred_le2_actual_le2_pct": 65.3,
+   "pred_ge5_n": 568,
+   "pred_ge5_actual_le2_pct": 16.4
+  }
+ ],
+ "common_subset_n": 3452,
+ "on_common_subset": [
+  {
+   "label": "office x PSC",
+   "n_scored": 3452,
+   "spearman": 0.652,
+   "base_le2_pct": 47.5,
+   "pred_le2_n": 1440,
+   "pred_le2_actual_le2_pct": 79.2,
+   "pred_ge5_n": 587,
+   "pred_ge5_actual_le2_pct": 14.7
+  },
+  {
+   "label": "office x NAICS6",
+   "n_scored": 3452,
+   "spearman": 0.666,
+   "base_le2_pct": 47.5,
+   "pred_le2_n": 1476,
+   "pred_le2_actual_le2_pct": 77.9,
+   "pred_ge5_n": 554,
+   "pred_ge5_actual_le2_pct": 13.4
+  },
+  {
+   "label": "office only",
+   "n_scored": 3452,
+   "spearman": 0.67,
+   "base_le2_pct": 47.5,
+   "pred_le2_n": 1481,
+   "pred_le2_actual_le2_pct": 78.5,
+   "pred_ge5_n": 512,
+   "pred_ge5_actual_le2_pct": 12.1
+  },
+  {
+   "label": "PSC only (nationwide)",
+   "n_scored": 3452,
+   "spearman": 0.623,
+   "base_le2_pct": 47.5,
+   "pred_le2_n": 1157,
+   "pred_le2_actual_le2_pct": 84.6,
+   "pred_ge5_n": 180,
+   "pred_ge5_actual_le2_pct": 14.4
+  },
+  {
+   "label": "NAICS6 only (nationwide)",
+   "n_scored": 3452,
+   "spearman": 0.59,
+   "base_le2_pct": 47.5,
+   "pred_le2_n": 801,
+   "pred_le2_actual_le2_pct": 96.9,
+   "pred_ge5_n": 69,
+   "pred_ge5_actual_le2_pct": 20.3
+  },
+  {
+   "label": "baseline: procedure x set-aside x PSC letter (nationwide)",
+   "n_scored": 3452,
+   "spearman": 0.621,
+   "base_le2_pct": 47.5,
+   "pred_le2_n": 1191,
+   "pred_le2_actual_le2_pct": 83.5,
+   "pred_ge5_n": 197,
+   "pred_ge5_actual_le2_pct": 14.2
+  }
+ ],
+ "sam_like_units": 5690,
+ "sam_like_each_on_own_subset": [
+  {
+   "label": "office x PSC",
+   "n_scored": 1453,
+   "spearman": 0.369,
+   "base_le2_pct": 26.1,
+   "pred_le2_n": 292,
+   "pred_le2_actual_le2_pct": 41.8,
+   "pred_ge5_n": 361,
+   "pred_ge5_actual_le2_pct": 11.4
+  },
+  {
+   "label": "office x NAICS6",
+   "n_scored": 1990,
+   "spearman": 0.341,
+   "base_le2_pct": 24.2,
+   "pred_le2_n": 403,
+   "pred_le2_actual_le2_pct": 34.2,
+   "pred_ge5_n": 497,
+   "pred_ge5_actual_le2_pct": 11.1
+  },
+  {
+   "label": "office only",
+   "n_scored": 3074,
+   "spearman": 0.329,
+   "base_le2_pct": 23.9,
+   "pred_le2_n": 553,
+   "pred_le2_actual_le2_pct": 39.8,
+   "pred_ge5_n": 697,
+   "pred_ge5_actual_le2_pct": 10.9
+  },
+  {
+   "label": "PSC only (nationwide)",
+   "n_scored": 3149,
+   "spearman": 0.198,
+   "base_le2_pct": 24.2,
+   "pred_le2_n": 279,
+   "pred_le2_actual_le2_pct": 36.2,
+   "pred_ge5_n": 281,
+   "pred_ge5_actual_le2_pct": 13.5
+  },
+  {
+   "label": "NAICS6 only (nationwide)",
+   "n_scored": 3189,
+   "spearman": 0.167,
+   "base_le2_pct": 24.3,
+   "pred_le2_n": 93,
+   "pred_le2_actual_le2_pct": 34.4,
+   "pred_ge5_n": 190,
+   "pred_ge5_actual_le2_pct": 10.0
+  },
+  {
+   "label": "baseline: procedure x set-aside x PSC letter (nationwide)",
+   "n_scored": 3161,
+   "spearman": 0.283,
+   "base_le2_pct": 24.1,
+   "pred_le2_n": 270,
+   "pred_le2_actual_le2_pct": 44.8,
+   "pred_ge5_n": 284,
+   "pred_ge5_actual_le2_pct": 12.7
+  }
+ ],
+ "sam_like_paired_n": 1441,
+ "sam_like_paired": [
+  {
+   "label": "office x PSC",
+   "n_scored": 1441,
+   "spearman": 0.369,
+   "base_le2_pct": 26.0,
+   "pred_le2_n": 289,
+   "pred_le2_actual_le2_pct": 41.5,
+   "pred_ge5_n": 358,
+   "pred_ge5_actual_le2_pct": 11.2
+  },
+  {
+   "label": "baseline: procedure x set-aside x PSC letter (nationwide)",
+   "n_scored": 1441,
+   "spearman": 0.313,
+   "base_le2_pct": 26.0,
+   "pred_le2_n": 150,
+   "pred_le2_actual_le2_pct": 47.3,
+   "pred_ge5_n": 139,
+   "pred_ge5_actual_le2_pct": 10.1
+  }
+ ],
+ "office_x_psc_top_offices": [
+  [
+   "47QSWA",
+   828,
+   21.2
+  ],
+  [
+   "6973GH",
+   147,
+   3.8
+  ],
+  [
+   "697DCK",
+   119,
+   3.0
+  ],
+  [
+   "75H711",
+   90,
+   2.3
+  ],
+  [
+   "W912WJ",
+   87,
+   2.2
+  ]
+ ],
+ "office_x_psc_without_top_office": {
+  "label": "office x PSC minus 47QSWA",
+  "n_scored": 3078,
+  "spearman": 0.39,
+  "base_le2_pct": 31.9,
+  "pred_le2_n": 728,
+  "pred_le2_actual_le2_pct": 57.0,
+  "pred_ge5_n": 707,
+  "pred_ge5_actual_le2_pct": 14.1
+ }
+}
