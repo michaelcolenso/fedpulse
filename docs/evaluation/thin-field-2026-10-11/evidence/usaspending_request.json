@@ -1,0 +1,7 @@
+{
+ "_endpoint": "POST https://api.usaspending.gov/api/v2/download/awards/  (poll status_url, then fetch file_url)",
+ "filters": {"prime_award_types": ["A","B","C","D"], "sub_award_types": [], "naics_codes": {"require": ["23"]},
+   "time_period": [{"start_date": "2022-10-01", "end_date": "2025-09-30", "date_type": "action_date"}]},
+ "columns": ["contract_award_unique_key","award_id_piid","parent_award_id_piid","award_type","awarding_agency_name","awarding_sub_agency_name","awarding_office_code","awarding_office_name","naics_code","product_or_service_code","primary_place_of_performance_state_code","recipient_name","recipient_uei","total_obligated_amount","potential_total_value_of_award","award_base_action_date","period_of_performance_start_date","period_of_performance_current_end_date","solicitation_identifier","number_of_offers_received","extent_competed","type_of_set_aside","solicitation_procedures","contracting_officers_determination_of_business_size"],
+ "file_format": "csv"
+}

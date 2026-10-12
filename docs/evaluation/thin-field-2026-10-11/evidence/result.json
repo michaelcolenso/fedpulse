@@ -1,0 +1,603 @@
+{
+ "n_awards": 78314,
+ "fill": {
+  "offers_present_pct": 65.8,
+  "solicitation_id_present_pct": 51.4,
+  "orders_under_idv_pct": 58.4,
+  "offers_present_standalone_pct": 100.0,
+  "idv_base_rows": 2879,
+  "solicitation_id_present_on_competed_standalone_pct": 59.8
+ },
+ "by_fy": {
+  "2023": 31322,
+  "2024": 27577,
+  "2025": 19415
+ },
+ "extent_competed_top": [
+  [
+   "FULL AND OPEN COMPETITION AFTER EXCLUSION OF SOURCES",
+   28329
+  ],
+  [
+   "COMPETED UNDER SAP",
+   18070
+  ],
+  [
+   "FULL AND OPEN COMPETITION",
+   12299
+  ],
+  [
+   "NOT AVAILABLE FOR COMPETITION",
+   9100
+  ],
+  [
+   "NOT COMPETED UNDER SAP",
+   5673
+  ],
+  [
+   "NOT COMPETED",
+   3762
+  ],
+  [
+   "",
+   1081
+  ]
+ ],
+ "standalone_competed_with_offers": 18369,
+ "offers_dist_standalone_competed": {
+  "median": 3.0,
+  "pct_1_offer": 22.3,
+  "pct_le2": 39.0,
+  "pct_ge5": 30.9
+ },
+ "predictive": [
+  {
+   "label": "office x NAICS6",
+   "n_scored": 6525,
+   "spearman": 0.525,
+   "n_pred_le2": 2279,
+   "actual_le2_pct_when_pred_le2": 67.0,
+   "n_pred_ge5": 1303,
+   "actual_le2_pct_when_pred_ge5": 15.6,
+   "base_rate_le2_pct": 39.5
+  },
+  {
+   "label": "office only",
+   "n_scored": 10348,
+   "spearman": 0.451,
+   "n_pred_le2": 2897,
+   "actual_le2_pct_when_pred_le2": 64.6,
+   "n_pred_ge5": 1903,
+   "actual_le2_pct_when_pred_ge5": 16.4,
+   "base_rate_le2_pct": 37.0
+  },
+  {
+   "label": "NAICS6 only (nationwide)",
+   "n_scored": 11160,
+   "spearman": 0.308,
+   "n_pred_le2": 1266,
+   "actual_le2_pct_when_pred_le2": 75.4,
+   "n_pred_ge5": 376,
+   "actual_le2_pct_when_pred_ge5": 18.9,
+   "base_rate_le2_pct": 37.4
+  },
+  {
+   "label": "office x PSC",
+   "n_scored": 4172,
+   "spearman": 0.636,
+   "n_pred_le2": 1604,
+   "actual_le2_pct_when_pred_le2": 77.2,
+   "n_pred_ge5": 811,
+   "actual_le2_pct_when_pred_ge5": 12.9,
+   "base_rate_le2_pct": 44.1
+  }
+ ],
+ "residential_repair_all": {
+  "n": 2305,
+  "obligated_usd": 1522620637,
+  "median_obligated_usd": 20177,
+  "pct_orders_under_idv": 58.2,
+  "pct_small_business": 30.6,
+  "standalone_median_offers": 4.0,
+  "standalone_with_offers": 717,
+  "distinct_winners": 642,
+  "distinct_small_winners": 381,
+  "distinct_offices": 242
+ },
+ "residential_repair_by_psc": {
+  "Z1FA": {
+   "n": 850,
+   "obligated_usd": 101490428,
+   "median_obligated_usd": 13450,
+   "pct_orders_under_idv": 51.8,
+   "pct_small_business": 9.2,
+   "standalone_median_offers": 4.0,
+   "standalone_with_offers": 315,
+   "distinct_winners": 184,
+   "distinct_small_winners": 63,
+   "distinct_offices": 110
+  },
+  "Z1FC": {
+   "n": 97,
+   "obligated_usd": 98815555,
+   "median_obligated_usd": 216800,
+   "pct_orders_under_idv": 84.5,
+   "pct_small_business": 62.9,
+   "standalone_median_offers": 4.0,
+   "standalone_with_offers": 3,
+   "distinct_winners": 54,
+   "distinct_small_winners": 41,
+   "distinct_offices": 28
+  },
+  "Z1FZ": {
+   "n": 289,
+   "obligated_usd": 44285011,
+   "median_obligated_usd": 23559,
+   "pct_orders_under_idv": 63.7,
+   "pct_small_business": 61.6,
+   "standalone_median_offers": 3.0,
+   "standalone_with_offers": 71,
+   "distinct_winners": 71,
+   "distinct_small_winners": 30,
+   "distinct_offices": 67
+  },
+  "Z2FA": {
+   "n": 600,
+   "obligated_usd": 225268432,
+   "median_obligated_usd": 17667,
+   "pct_orders_under_idv": 63.3,
+   "pct_small_business": 23.8,
+   "standalone_median_offers": 4.0,
+   "standalone_with_offers": 166,
+   "distinct_winners": 199,
+   "distinct_small_winners": 117,
+   "distinct_offices": 86
+  },
+  "Z2FC": {
+   "n": 216,
+   "obligated_usd": 890454839,
+   "median_obligated_usd": 379519,
+   "pct_orders_under_idv": 75.9,
+   "pct_small_business": 69.9,
+   "standalone_median_offers": 4.0,
+   "standalone_with_offers": 25,
+   "distinct_winners": 135,
+   "distinct_small_winners": 102,
+   "distinct_offices": 46
+  },
+  "Z2FZ": {
+   "n": 253,
+   "obligated_usd": 162306373,
+   "median_obligated_usd": 29579,
+   "pct_orders_under_idv": 36.4,
+   "pct_small_business": 37.2,
+   "standalone_median_offers": 4.0,
+   "standalone_with_offers": 137,
+   "distinct_winners": 140,
+   "distinct_small_winners": 80,
+   "distinct_offices": 85
+  }
+ },
+ "residential_repair_by_fy": {
+  "2023": {
+   "n": 755,
+   "obligated_usd": 639064547,
+   "median_obligated_usd": 28626,
+   "pct_orders_under_idv": 52.2,
+   "pct_small_business": 36.0,
+   "standalone_median_offers": 3.0,
+   "standalone_with_offers": 257,
+   "distinct_winners": 308,
+   "distinct_small_winners": 175,
+   "distinct_offices": 159
+  },
+  "2024": {
+   "n": 798,
+   "obligated_usd": 338201839,
+   "median_obligated_usd": 19859,
+   "pct_orders_under_idv": 59.0,
+   "pct_small_business": 29.8,
+   "standalone_median_offers": 4.0,
+   "standalone_with_offers": 247,
+   "distinct_winners": 283,
+   "distinct_small_winners": 153,
+   "distinct_offices": 150
+  },
+  "2025": {
+   "n": 752,
+   "obligated_usd": 545354252,
+   "median_obligated_usd": 17701,
+   "pct_orders_under_idv": 63.4,
+   "pct_small_business": 25.9,
+   "standalone_median_offers": 3.0,
+   "standalone_with_offers": 213,
+   "distinct_winners": 244,
+   "distinct_small_winners": 114,
+   "distinct_offices": 124
+  }
+ },
+ "residential_repair_top_states_usd": [
+  [
+   "",
+   514133510
+  ],
+  [
+   "TX",
+   235976502
+  ],
+  [
+   "GU",
+   208072660
+  ],
+  [
+   "CA",
+   113335368
+  ],
+  [
+   "OK",
+   81301688
+  ],
+  [
+   "NC",
+   54727243
+  ],
+  [
+   "WA",
+   36897848
+  ],
+  [
+   "AZ",
+   33816412
+  ],
+  [
+   "HI",
+   30898124
+  ],
+  [
+   "NY",
+   27625221
+  ],
+  [
+   "AR",
+   24408640
+  ],
+  [
+   "MS",
+   24117541
+  ]
+ ],
+ "residential_repair_top_subagencies_usd": [
+  [
+   "Department of the Navy",
+   503118559
+  ],
+  [
+   "Department of the Air Force",
+   491611305
+  ],
+  [
+   "Department of the Army",
+   421291149
+  ],
+  [
+   "Department of State",
+   37628531
+  ],
+  [
+   "U.S. Customs and Border Protection",
+   20448179
+  ],
+  [
+   "U.S. Coast Guard",
+   19075217
+  ],
+  [
+   "National Park Service",
+   14332611
+  ],
+  [
+   "Forest Service",
+   4243130
+  ],
+  [
+   "U.S. Fish and Wildlife Service",
+   3126571
+  ],
+  [
+   "Federal Emergency Management Agency",
+   2546977
+  ]
+ ],
+ "residential_repair_WA": {
+  "n": 21,
+  "obligated_usd": 36897848,
+  "median_obligated_usd": 405199,
+  "pct_orders_under_idv": 61.9,
+  "pct_small_business": 90.5,
+  "standalone_median_offers": 6.0,
+  "standalone_with_offers": 7,
+  "distinct_winners": 15,
+  "distinct_small_winners": 13,
+  "distinct_offices": 4
+ },
+ "construction_WA_all": {
+  "n": 1796,
+  "obligated_usd": 1551911718,
+  "median_obligated_usd": 86541,
+  "pct_orders_under_idv": 69.5,
+  "pct_small_business": 89.4,
+  "standalone_median_offers": 3.0,
+  "standalone_with_offers": 405,
+  "distinct_winners": 509,
+  "distinct_small_winners": 444,
+  "distinct_offices": 105
+ },
+ "construction_WA_top_offices": [
+  [
+   "NAVFACSYSCOM NORTHWEST",
+   313,
+   839402345
+  ],
+  [
+   "W071 ENDIST SEATTLE",
+   108,
+   139392962
+  ],
+  [
+   "FA4620  92 CONS LGC",
+   74,
+   116311950
+  ],
+  [
+   "W6QM MICC-JB LEWIS-MC CHORD",
+   259,
+   97172793
+  ],
+  [
+   "W071 ENDIST PORTLAND",
+   8,
+   45448754
+  ],
+  [
+   "W072 ENDIST LOUISVILLE",
+   2,
+   36386619
+  ],
+  [
+   "US ARMY ENGINEER DISTRICT WALLA WAL",
+   28,
+   24145062
+  ],
+  [
+   "USDA-FS, CSA NORTHWEST 6",
+   38,
+   20952643
+  ],
+  [
+   "260-NETWORK CONTRACT OFFICE 20 (36C260)",
+   106,
+   18581207
+  ],
+  [
+   "GSA/FAS/GSS/QSCBD/ASSISTED CONTRACTING BRANCH B",
+   65,
+   17880278
+  ]
+ ],
+ "pool_residential_all": {
+  "label": "residential repair (Z1F/Z2F A,C,Z), US",
+  "n": 2305,
+  "obligated_usd": 1522620637,
+  "pct_usd_via_idv_orders": 59.6,
+  "top_parent_idvs": [
+   [
+    "FA520920D0009",
+    3,
+    85775151,
+    [
+     "NIPPO CORPORATION"
+    ]
+   ],
+   [
+    "FA527017D0007",
+    11,
+    36502742,
+    [
+     "AMERICAN ENGINEERING CORPORATION"
+    ]
+   ],
+   [
+    "N6247324D5231",
+    1,
+    34538295,
+    [
+     "HARPER CONSTRUCTION COMPANY, INC."
+    ]
+   ],
+   [
+    "N4008423D0077",
+    1,
+    33426075,
+    [
+     "AMERICAN ENGINEERING CORPORATION"
+    ]
+   ],
+   [
+    "N6247321D1206",
+    1,
+    32045039,
+    [
+     "HARPER CONSTRUCTION COMPANY, INC."
+    ]
+   ],
+   [
+    "N4008421D0078",
+    1,
+    27241730,
+    [
+     "TODA-NUDP JV"
+    ]
+   ],
+   [
+    "W911S223D8500",
+    2,
+    26486100,
+    [
+     "ARMITAGE SAI JV"
+    ]
+   ],
+   [
+    "W912HN20D4007",
+    13,
+    24723095,
+    [
+     "LEGACY JOINT VENTURE GROUP, LLC"
+    ]
+   ]
+  ]
+ },
+ "pool_residential_WA": {
+  "label": "residential repair, WA",
+  "n": 21,
+  "obligated_usd": 36897848,
+  "pct_usd_via_idv_orders": 99.2,
+  "top_parent_idvs": [
+   [
+    "N4425521D5005",
+    1,
+    18788000,
+    [
+     "NOVA GROUP, INC."
+    ]
+   ],
+   [
+    "N4425523D1600",
+    4,
+    5436001,
+    [
+     "PORT MADISON CONSTRUCTION CORPORATION"
+    ]
+   ],
+   [
+    "N4425519D0008",
+    2,
+    3699903,
+    [
+     "PORT MADISON ENTERPRISES CONSTRUCTION CORPORATION"
+    ]
+   ],
+   [
+    "N4425523D1601",
+    1,
+    3257447,
+    [
+     "AYKO GROUP-WA PATRIOT JV, LLC"
+    ]
+   ],
+   [
+    "N4425521D2004",
+    1,
+    2473653,
+    [
+     "SHAPE CONSTRUCTION INC"
+    ]
+   ],
+   [
+    "N4425523D1606",
+    1,
+    1792848,
+    [
+     "GRENLAR SHAPE JV, LLC"
+    ]
+   ],
+   [
+    "N4425518D5025",
+    1,
+    584814,
+    [
+     "WHH NISQUALLY FEDERAL SERVICES, LLC"
+    ]
+   ],
+   [
+    "N4425524D5000",
+    1,
+    405199,
+    [
+     "PORT MADISON CONSTRUCTION CORPORATION"
+    ]
+   ]
+  ]
+ },
+ "pool_construction_WA": {
+  "label": "all NAICS 23, WA",
+  "n": 1796,
+  "obligated_usd": 1551911718,
+  "pct_usd_via_idv_orders": 77.9,
+  "top_parent_idvs": [
+   [
+    "N6274222D1313",
+    2,
+    325073119,
+    [
+     "KIEWIT-ALBERICI SIOP MACC AJV"
+    ]
+   ],
+   [
+    "N4425521D5008",
+    11,
+    51370364,
+    [
+     "TRITON MARINE CONSTRUCTION CORP."
+    ]
+   ],
+   [
+    "N4425521D5005",
+    8,
+    50794688,
+    [
+     "NOVA GROUP, INC."
+    ]
+   ],
+   [
+    "N4425523D1600",
+    27,
+    46276542,
+    [
+     "PORT MADISON CONSTRUCTION CORPORATION"
+    ]
+   ],
+   [
+    "N4425519D0008",
+    75,
+    38767201,
+    [
+     "PORT MADISON ENTERPRISES CONSTRUCTION CORPORATION"
+    ]
+   ],
+   [
+    "W911S823D0003",
+    80,
+    31770426,
+    [
+     "MIDNIGHT SUN-CENTENNIAL KIRRATCHIAQ JV, LLC"
+    ]
+   ],
+   [
+    "N4425523D1703",
+    2,
+    31132331,
+    [
+     "SHAPE CONSTRUCTION INC"
+    ]
+   ],
+   [
+    "N4425521D2002",
+    3,
+    28238420,
+    [
+     "I.E.-PACIFIC, INC."
+    ]
+   ]
+  ]
+ }
+}

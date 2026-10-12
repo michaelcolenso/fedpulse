@@ -1,0 +1,109 @@
+{
+ "units": 148249,
+ "units_with_solicitation_id": 121703,
+ "each_on_own_subset": [
+  {
+   "label": "office x PSC",
+   "n_scored": 79123,
+   "spearman": 0.369,
+   "base_le2_pct": 54.1,
+   "pred_le2_n": 51077,
+   "pred_le2_actual_le2_pct": 64.3,
+   "pred_ge5_n": 7438,
+   "pred_ge5_actual_le2_pct": 17.4
+  },
+  {
+   "label": "office x NAICS6",
+   "n_scored": 80886,
+   "spearman": 0.356,
+   "base_le2_pct": 53.9,
+   "pred_le2_n": 53598,
+   "pred_le2_actual_le2_pct": 63.4,
+   "pred_ge5_n": 7566,
+   "pred_ge5_actual_le2_pct": 17.3
+  },
+  {
+   "label": "office only",
+   "n_scored": 98390,
+   "spearman": 0.337,
+   "base_le2_pct": 50.9,
+   "pred_le2_n": 68450,
+   "pred_le2_actual_le2_pct": 59.7,
+   "pred_ge5_n": 7223,
+   "pred_ge5_actual_le2_pct": 15.4
+  },
+  {
+   "label": "PSC only (nationwide)",
+   "n_scored": 98710,
+   "spearman": 0.31,
+   "base_le2_pct": 50.9,
+   "pred_le2_n": 60485,
+   "pred_le2_actual_le2_pct": 60.5,
+   "pred_ge5_n": 5806,
+   "pred_ge5_actual_le2_pct": 17.9
+  },
+  {
+   "label": "NAICS6 only (nationwide)",
+   "n_scored": 99278,
+   "spearman": 0.26,
+   "base_le2_pct": 50.8,
+   "pred_le2_n": 66015,
+   "pred_le2_actual_le2_pct": 57.9,
+   "pred_ge5_n": 4781,
+   "pred_ge5_actual_le2_pct": 16.4
+  }
+ ],
+ "common_subset_n": 75091,
+ "on_common_subset": [
+  {
+   "label": "office x PSC",
+   "n_scored": 75091,
+   "spearman": 0.367,
+   "base_le2_pct": 54.5,
+   "pred_le2_n": 49046,
+   "pred_le2_actual_le2_pct": 64.5,
+   "pred_ge5_n": 6704,
+   "pred_ge5_actual_le2_pct": 17.2
+  },
+  {
+   "label": "office x NAICS6",
+   "n_scored": 75091,
+   "spearman": 0.35,
+   "base_le2_pct": 54.5,
+   "pred_le2_n": 50840,
+   "pred_le2_actual_le2_pct": 63.5,
+   "pred_ge5_n": 6284,
+   "pred_ge5_actual_le2_pct": 16.2
+  },
+  {
+   "label": "office only",
+   "n_scored": 75091,
+   "spearman": 0.287,
+   "base_le2_pct": 54.5,
+   "pred_le2_n": 59043,
+   "pred_le2_actual_le2_pct": 60.2,
+   "pred_ge5_n": 3492,
+   "pred_ge5_actual_le2_pct": 12.7
+  },
+  {
+   "label": "PSC only (nationwide)",
+   "n_scored": 75091,
+   "spearman": 0.298,
+   "base_le2_pct": 54.5,
+   "pred_le2_n": 50795,
+   "pred_le2_actual_le2_pct": 62.4,
+   "pred_ge5_n": 3278,
+   "pred_ge5_actual_le2_pct": 14.4
+  },
+  {
+   "label": "NAICS6 only (nationwide)",
+   "n_scored": 75091,
+   "spearman": 0.247,
+   "base_le2_pct": 54.5,
+   "pred_le2_n": 54375,
+   "pred_le2_actual_le2_pct": 60.3,
+   "pred_ge5_n": 2969,
+   "pred_ge5_actual_le2_pct": 12.4
+  }
+ ]
+}
