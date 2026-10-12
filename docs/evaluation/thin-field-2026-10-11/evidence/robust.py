@@ -41,13 +41,14 @@ for r in csv.DictReader(open(src, newline="", encoding="utf-8")):
     if o <= 0 or o >= 999: continue  # 999 = not captured
     sol = r["solicitation_identifier"].strip().upper()
     k = ("S", r["awarding_office_code"], sol) if sol else ("A", r["contract_award_unique_key"])
-    if k not in units or d < units[k]["date"]:
+    order = (d, r["contract_award_unique_key"])  # earliest award; ties broken by award key so row order never matters
+    if k not in units or order < units[k]["order"]:
         try: v = float(r["potential_total_value_of_award"])
         except ValueError: v = 0.0
-        units[k] = {"date": d, "fy": fy(d), "office": r["awarding_office_code"], "psc": r["product_or_service_code"][:4],
+        units[k] = {"order": order, "date": d, "fy": fy(d), "office": r["awarding_office_code"], "psc": r["product_or_service_code"][:4],
                     "naics": r["naics_code"][:6], "offers": o, "has_sol": bool(sol), "value": v,
                     "proc": r["solicitation_procedures"].upper(), "setaside": r["type_of_set_aside"].upper()}
-comp = sorted(units.values(), key=lambda u: u["date"])
+comp = sorted(units.values(), key=lambda u: u["order"])
 for i, u in enumerate(comp): u["i"] = i
 
 GROUPINGS = [

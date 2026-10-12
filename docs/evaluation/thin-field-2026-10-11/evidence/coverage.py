@@ -39,8 +39,9 @@ for r in csv.DictReader(open(fpds_path, newline="", encoding="utf-8")):
     if o <= 0 or o >= 999: continue
     sol = r["solicitation_identifier"].strip().upper()
     k = ("S", r["awarding_office_code"], sol) if sol else ("A", r["contract_award_unique_key"])
-    if k not in units or d < units[k]["date"]:
-        units[k] = {"date": d, "office": r["awarding_office_code"], "psc": r["product_or_service_code"][:4], "offers": o}
+    order = (d, r["contract_award_unique_key"])  # earliest award; ties broken by award key so row order never matters
+    if k not in units or order < units[k]["order"]:
+        units[k] = {"order": order, "office": r["awarding_office_code"], "psc": r["product_or_service_code"][:4], "offers": o}
 
 hist = defaultdict(dict); hist_office = defaultdict(dict)
 for k, u in units.items():
