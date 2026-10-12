@@ -1,4 +1,5 @@
 {
+ "population_note": "Open SAM notices: active, PSC Y/Z, not sole-source, deadline >= the given date. Broader than the backtest's SAM-like population, which also requires potential value >= $25k: open notices carry no value before award (Award$ is empty on every active Y/Z bid notice), so the value floor cannot be applied and the backtest's 0.37 / 41.8% figures are not validated for sub-$25k notices included here.",
  "postings": {
   "n": 876,
   "office_psc": 346,
@@ -7,28 +8,28 @@
   "any_pct": 88.4
  },
  "unique_solicitations": {
-  "n": 469,
-  "office_psc": 204,
+  "n": 471,
+  "office_psc": 205,
   "office_psc_pct": 43.5,
-  "office_only": 208,
-  "any_pct": 87.8
+  "office_only": 209,
+  "any_pct": 87.9
  },
  "unique_bid_solicitations": {
-  "n": 318,
-  "office_psc": 135,
+  "n": 320,
+  "office_psc": 136,
   "office_psc_pct": 42.5,
-  "office_only": 140,
-  "any_pct": 86.5
+  "office_only": 141,
+  "any_pct": 86.6
  },
  "bid_forecast_split_by_level": {
   "office_psc": {
-   "le2": 17,
+   "le2": 18,
    "between": 107,
    "ge5": 11
   },
   "office": {
    "le2": 33,
-   "between": 82,
+   "between": 83,
    "ge5": 25
   }
  },
@@ -254,6 +255,20 @@
    "setaside": "",
    "level": "office_psc",
    "n_prior": 4,
+   "median": 2.0,
+   "pct_single": 0
+  },
+  {
+   "sol": "70Z0G126BSLISSW02",
+   "title": "USCG Cutter Eagle New Dredging for Berthing at New London City Pier",
+   "office": "CEU PROVIDENCE(000G1)",
+   "aac": "70Z0G1",
+   "psc": "Z1KF",
+   "deadline": "2026-10-15",
+   "pop_state": "CT",
+   "setaside": "Small Business Set Aside - Total",
+   "level": "office_psc",
+   "n_prior": 3,
    "median": 2.0,
    "pct_single": 0
   },

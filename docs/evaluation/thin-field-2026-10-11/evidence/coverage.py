@@ -6,8 +6,11 @@ no non-competed / NOT AVAILABLE), base date FY2023-2025, offers 1..998, one per 
 the competed SAM-like backtest population.
 Keyed by SAM 'AAC Code' == FPDS awarding_office_code and SAM ClassificationCode == FPDS PSC.
 
+The backtest's SAM-like population also requires potential value >= $25k; open notices have no value
+before award, so that floor cannot be applied here and sub-$25k notices are an unvalidated population.
+
 Reports both notice postings (amendments/reposts count separately) and unique solicitations
-(Sol# upper-cased; the latest posting wins).
+(office AAC + upper-cased Sol#; the latest posting wins).
 
 Usage: uv run python -I coverage.py <fpds_contracts.csv> <sam_ContractOpportunitiesFullCSV.csv> <YYYY-MM-DD> [out.json]
 """
@@ -65,7 +68,8 @@ for r in csv.DictReader(open(sam_path, newline="", encoding="utf-8", errors="rep
 
 latest = {}
 for p in postings:
-    if p["sol"] not in latest or p["posted"] > latest[p["sol"]]["posted"]: latest[p["sol"]] = p
+    k = (p["aac"], p["sol"])  # solicitation numbers are office-scoped, as in robust.py's unit key
+    if k not in latest or p["posted"] > latest[k]["posted"]: latest[k] = p
 uniq = list(latest.values()); bids = [p for p in uniq if p["type"] in BID_TYPES]
 
 
@@ -80,6 +84,10 @@ def split(ps):
 
 scored = [p for p in bids if p["median"] is not None]
 out = {
+    "population_note": ("Open SAM notices: active, PSC Y/Z, not sole-source, deadline >= the given date. Broader than the backtest's "
+                        "SAM-like population, which also requires potential value >= $25k: open notices carry no value before award "
+                        "(Award$ is empty on every active Y/Z bid notice), so the value floor cannot be applied and the backtest's "
+                        "0.37 / 41.8% figures are not validated for sub-$25k notices included here."),
     "postings": levels(postings),
     "unique_solicitations": levels(uniq),
     "unique_bid_solicitations": levels(bids),
