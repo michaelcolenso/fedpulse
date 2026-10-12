@@ -76,7 +76,8 @@ uniq = list(latest.values()); bids = [p for p in uniq if p["type"] in BID_TYPES]
 
 def levels(ps):
     n = len(ps); a = sum(p["level"] == "office_psc" for p in ps); b = sum(p["level"] == "office" for p in ps)
-    return {"n": n, "office_psc": a, "office_psc_pct": round(100 * a / n, 1), "office_only": b, "any_pct": round(100 * (a + b) / n, 1)}
+    pct = lambda x: round(100 * x / n, 1) if n else None  # empty population (e.g. cutoff after every deadline)
+    return {"n": n, "office_psc": a, "office_psc_pct": pct(a), "office_only": b, "any_pct": pct(a + b)}
 
 
 def split(ps):
